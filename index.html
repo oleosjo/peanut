@@ -1,0 +1,54 @@
+<html>
+	<head>
+		
+		<title>A single peanut.</title>
+		<script type="text/javascript" src="http://ajax.googleapis.com/ajax/libs/jquery/1.4.2/jquery.min.js"></script>
+		<script type="text/javascript" src="http://ajax.googleapis.com/ajax/libs/jqueryui/1.7.2/jquery-ui.min.js"></script>
+		
+		<script type="text/javascript">
+			$(document).ready(function(){
+				var start = true
+				
+				$("#peanut").draggable();
+				
+				/*$("#peanut").mouseenter(function(){
+					if (start)
+						$("#s1").fadeIn("slow");
+					else
+						$("#s2").fadeIn("slow");
+				});
+				$("#peanut").mouseleave(function(){
+					if (start){
+						$("#s1").fadeOut("slow");
+						start = false;
+						}
+					else
+						$("#s2").fadeOut("slow");
+				});*/
+			})
+			
+		</script>
+		<style type="text/css">
+			#peanut {
+				margin-top:20%;
+				
+			}
+			#peanut:hover {
+				cursor:move;
+			}
+			#s1, #s2 {
+				position:absolute;
+				left:40%;
+				top:2%;
+				display:none;
+			}
+		</style>
+		</head>
+	<body>
+		<div align="center">
+        <!--<img id="s1" src="s1.png" />
+        <img id="s2" src="s2.png" />-->
+		<img id="peanut" src="peanut.jpg" />
+		</div>
+	</body>
+</html>
