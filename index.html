@@ -1,54 +1,47 @@
-<html>
-	<head>
-		
-		<title>A single peanut.</title>
-		<script type="text/javascript" src="https://ajax.googleapis.com/ajax/libs/jquery/1.4.2/jquery.min.js"></script>
-		<script type="text/javascript" src="https://ajax.googleapis.com/ajax/libs/jqueryui/1.7.2/jquery-ui.min.js"></script>
-		
-		<script type="text/javascript">
-			$(document).ready(function(){
-				var start = true
-				
-				$("#peanut").draggable();
-				
-				/*$("#peanut").mouseenter(function(){
-					if (start)
-						$("#s1").fadeIn("slow");
-					else
-						$("#s2").fadeIn("slow");
-				});
-				$("#peanut").mouseleave(function(){
-					if (start){
-						$("#s1").fadeOut("slow");
-						start = false;
-						}
-					else
-						$("#s2").fadeOut("slow");
-				});*/
-			})
-			
-		</script>
-		<style type="text/css">
-			#peanut {
-				margin-top:20%;
-				
-			}
-			#peanut:hover {
-				cursor:move;
-			}
-			#s1, #s2 {
-				position:absolute;
-				left:40%;
-				top:2%;
-				display:none;
-			}
-		</style>
-		</head>
-	<body>
-		<div align="center">
-        <!--<img id="s1" src="s1.png" />
-        <img id="s2" src="s2.png" />-->
-		<img id="peanut" src="peanut.jpg" />
-		</div>
-	</body>
+<!doctype html>
+<html lang="en">
+    <head>
+        <meta charset="UTF-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+        <title>A single peanut.</title>
+        <link rel="icon" type="image/jpeg" href="peanut.jpg" />
+
+        <script
+            type="module"
+            src="https://cdn.jsdelivr.net/npm/@google/model-viewer/dist/model-viewer.min.js"
+        ></script>
+
+        <style>
+            /* This ensures the model takes up the full screen */
+            body {
+                margin: 0;
+                height: 100vh;
+                background-color: #fff;
+            }
+            model-viewer {
+                width: 100%;
+                height: 100%;
+                --poster-color: transparent;
+            }
+        </style>
+    </head>
+    <body>
+        <div class="grid-background">
+            <div class="grid-floor"></div>
+            <div class="horizon-glow"></div>
+        </div>
+        <model-viewer
+            src="peanut.glb"
+            alt="A single peanut."
+            auto-rotate
+            interaction-prompt="none"
+            camera-controls
+            shadow-intensity="1"
+            touch-action="pan-y"
+            camera-orbit="70deg auto 450%"
+            min-camera-orbit="auto auto 150%"
+            max-camera-orbit="auto auto 500%"
+        >
+        </model-viewer>
+    </body>
 </html>
