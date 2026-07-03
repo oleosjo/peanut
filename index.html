@@ -6,9 +6,12 @@
         <title>A single peanut.</title>
         <link rel="icon" type="image/jpeg" href="peanut.jpg" />
 
+        <!-- Start downloading the model immediately, in parallel with the viewer script -->
+        <link rel="preload" href="peanut.glb" as="fetch" crossorigin="anonymous" />
+
         <script
             type="module"
-            src="https://cdn.jsdelivr.net/npm/@google/model-viewer/dist/model-viewer.min.js"
+            src="https://cdn.jsdelivr.net/npm/@google/model-viewer@4.3.1/dist/model-viewer.min.js"
         ></script>
 
         <style>
