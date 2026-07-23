@@ -97,6 +97,7 @@ const saturn = makePlanet(
 );
 
 const starTexture = loadTexture("assets/star-disc.png");
+const glowTexture = loadTexture("assets/star-glow.png");
 
 function makeStarfield(count, spread, depth, size, opacity) {
     const positions = new Float32Array(count * 3);
@@ -179,7 +180,7 @@ const bloomOrigins = [
 const blooms = bloomOrigins.map((origin, index) => {
     const group = new THREE.Group();
     const haloMaterial = new THREE.SpriteMaterial({
-        map: starTexture,
+        map: glowTexture,
         color: bloomColors[index],
         transparent: true,
         opacity: 0.18,
@@ -187,10 +188,18 @@ const blooms = bloomOrigins.map((origin, index) => {
         blending: THREE.AdditiveBlending,
     });
     const halo = new THREE.Sprite(haloMaterial);
-    halo.scale.setScalar(1.05);
-    const core = new THREE.Sprite(haloMaterial.clone());
-    core.material.opacity = 0.72;
-    core.scale.setScalar(0.16);
+    halo.scale.setScalar(0.8);
+    const core = new THREE.Sprite(
+        new THREE.SpriteMaterial({
+            map: starTexture,
+            color: bloomColors[index],
+            transparent: true,
+            opacity: 0.72,
+            depthWrite: false,
+            blending: THREE.AdditiveBlending,
+        }),
+    );
+    core.scale.setScalar(0.1);
     const light = new THREE.PointLight(bloomColors[index], 3, 7, 2);
     group.add(halo, core, light);
     group.position.copy(origin);
@@ -312,7 +321,7 @@ function updateBlooms() {
         const proximity = THREE.MathUtils.clamp(1 - distance / 2.2, 0, 1);
         const pulse = 0.5 + Math.sin(driftTime * 1.25 + phase) * 0.5;
         halo.material.opacity = 0.12 + pulse * 0.08 + proximity * 0.3;
-        halo.scale.setScalar(0.9 + pulse * 0.2 + proximity * 0.5);
+        halo.scale.setScalar(0.62 + pulse * 0.16 + proximity * 0.38);
         core.material.opacity = 0.58 + pulse * 0.22;
         light.intensity = 2 + proximity * 22;
     }

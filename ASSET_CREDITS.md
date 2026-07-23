@@ -28,7 +28,8 @@ remain text-free.
 
 ## Star sprite
 
-- File: `assets/star-disc.png`
-- Source: [Three.js example textures](https://github.com/mrdoob/three.js/blob/r180/examples/textures/sprites/disc.png)
+- Files: `assets/star-disc.png`, `assets/star-glow.png`
+- Sources: [disc sprite](https://github.com/mrdoob/three.js/blob/r180/examples/textures/sprites/disc.png)
+  and [lens flare](https://github.com/mrdoob/three.js/blob/r180/examples/textures/lensflare/lensflare0.png)
 - Credit: Three.js contributors
 - License: MIT
