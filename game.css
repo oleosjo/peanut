@@ -27,4 +27,10 @@ body {
     width: 100%;
     height: 100%;
     background: #010107;
+    cursor: grab;
+    touch-action: none;
+}
+
+#space.is-dragging {
+    cursor: grabbing;
 }

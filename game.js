@@ -54,6 +54,9 @@ controls.maxDistance = 18;
 controls.minPolarAngle = 0.05;
 controls.maxPolarAngle = Math.PI - 0.05;
 controls.zoomToCursor = true;
+controls.mouseButtons.LEFT = -1;
+controls.mouseButtons.MIDDLE = THREE.MOUSE.DOLLY;
+controls.mouseButtons.RIGHT = THREE.MOUSE.ROTATE;
 controls.update();
 
 const textureLoader = new THREE.TextureLoader();
@@ -297,8 +300,13 @@ const desiredVelocity = new THREE.Vector2();
 const clock = new THREE.Clock();
 const lastPlayerPosition = player.position.clone();
 const playerDelta = new THREE.Vector3();
+const peanutSpinVelocity = new THREE.Vector2();
 let driftTime = 0;
 let trailAccumulator = 0;
+let peanutDragging = false;
+let peanutPointerId = null;
+let previousPointerX = 0;
+let previousPointerY = 0;
 
 function updatePlayer(delta) {
     const horizontal = Number(keys.has("ArrowRight") || keys.has("KeyD"))
@@ -320,7 +328,13 @@ function updatePlayer(delta) {
 
     player.rotation.z = THREE.MathUtils.damp(player.rotation.z, -velocity.x * 0.32, 1.2, delta);
     player.rotation.x = THREE.MathUtils.damp(player.rotation.x, velocity.y * 0.16, 1.2, delta);
-    peanutPivot.rotation.y += delta * 0.16;
+
+    if (!peanutDragging) {
+        peanutPivot.rotation.x += peanutSpinVelocity.x * delta;
+        peanutPivot.rotation.y += (0.16 + peanutSpinVelocity.y) * delta;
+        peanutSpinVelocity.x = THREE.MathUtils.damp(peanutSpinVelocity.x, 0, 2.4, delta);
+        peanutSpinVelocity.y = THREE.MathUtils.damp(peanutSpinVelocity.y, 0, 2.4, delta);
+    }
 }
 
 function updateTrail(delta) {
@@ -443,6 +457,47 @@ function onResize() {
 }
 
 window.addEventListener("resize", onResize);
+canvas.addEventListener("contextmenu", (event) => event.preventDefault());
+canvas.addEventListener("pointerdown", (event) => {
+    if (event.button !== 0 || event.pointerType === "touch") return;
+    event.preventDefault();
+    peanutDragging = true;
+    peanutPointerId = event.pointerId;
+    previousPointerX = event.clientX;
+    previousPointerY = event.clientY;
+    peanutSpinVelocity.set(0, 0);
+    canvas.setPointerCapture(event.pointerId);
+    canvas.classList.add("is-dragging");
+});
+canvas.addEventListener("pointermove", (event) => {
+    if (!peanutDragging || event.pointerId !== peanutPointerId) return;
+    const deltaX = event.clientX - previousPointerX;
+    const deltaY = event.clientY - previousPointerY;
+    previousPointerX = event.clientX;
+    previousPointerY = event.clientY;
+
+    peanutPivot.rotation.y += deltaX * 0.008;
+    peanutPivot.rotation.x = THREE.MathUtils.clamp(
+        peanutPivot.rotation.x + deltaY * 0.006,
+        -1.25,
+        1.25,
+    );
+    peanutSpinVelocity.set(deltaY * 0.09, deltaX * 0.12);
+});
+canvas.addEventListener("pointerup", (event) => {
+    if (event.pointerId !== peanutPointerId) return;
+    peanutDragging = false;
+    peanutPointerId = null;
+    if (canvas.hasPointerCapture(event.pointerId)) {
+        canvas.releasePointerCapture(event.pointerId);
+    }
+    canvas.classList.remove("is-dragging");
+});
+canvas.addEventListener("pointercancel", () => {
+    peanutDragging = false;
+    peanutPointerId = null;
+    canvas.classList.remove("is-dragging");
+});
 window.addEventListener("keydown", (event) => {
     if (["ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight"].includes(event.code)) {
         event.preventDefault();
