@@ -29,9 +29,9 @@ remain text-free.
 ## Sun
 
 - File: `assets/sun.png`
-- Source: [NASA image via Wikimedia Commons](https://commons.wikimedia.org/wiki/File:Red_Hot_Sun.PNG)
-- Credit: NASA
-- License: Public domain
+- Source: [NASA SDO composite via OpenGameArt](https://opengameart.org/content/the-sun)
+- Credit: NASA/SDO and LFA
+- License: Public domain / CC0
 
 ## Star sprite
 
