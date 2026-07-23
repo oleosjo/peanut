@@ -7,7 +7,7 @@ const canvas = document.querySelector("#space");
 const scene = new THREE.Scene();
 scene.fog = new THREE.FogExp2(0x080713, 0.0065);
 
-const camera = new THREE.PerspectiveCamera(52, innerWidth / innerHeight, 0.1, 180);
+const camera = new THREE.PerspectiveCamera(52, innerWidth / innerHeight, 0.1, 250);
 camera.position.set(0, 0.25, 8);
 
 const renderer = new THREE.WebGLRenderer({
@@ -50,11 +50,9 @@ controls.dampingFactor = 0.045;
 controls.enablePan = true;
 controls.screenSpacePanning = true;
 controls.minDistance = 4.5;
-controls.maxDistance = 12;
-controls.minPolarAngle = Math.PI / 2 - 0.3;
-controls.maxPolarAngle = Math.PI / 2 + 0.3;
-controls.minAzimuthAngle = -0.45;
-controls.maxAzimuthAngle = 0.45;
+controls.maxDistance = 18;
+controls.minPolarAngle = 0.05;
+controls.maxPolarAngle = Math.PI - 0.05;
 controls.zoomToCursor = true;
 controls.update();
 
@@ -68,91 +66,84 @@ function loadTexture(path, colorSpace = THREE.SRGBColorSpace) {
     return texture;
 }
 
-const nebulaTexture = loadTexture("assets/cosmic-cliffs.png");
-nebulaTexture.minFilter = THREE.LinearMipmapLinearFilter;
-nebulaTexture.repeat.set(1, 0.66);
-nebulaTexture.offset.set(0, 0.15);
+const skyTexture = loadTexture("assets/star-map-360.jpg");
+skyTexture.mapping = THREE.EquirectangularReflectionMapping;
+skyTexture.minFilter = THREE.LinearMipmapLinearFilter;
+scene.background = skyTexture;
+scene.backgroundIntensity = 0.72;
 
-const nebulaMaterial = new THREE.MeshBasicMaterial({
-    map: nebulaTexture,
-    color: 0x706b86,
-    fog: false,
-    depthWrite: false,
-});
-const nebula = new THREE.Mesh(new THREE.PlaneGeometry(350, 130), nebulaMaterial);
-nebula.position.set(0, 0, -115);
-scene.add(nebula);
+const planetGeometry = new THREE.SphereGeometry(1, 64, 32);
+const planets = [];
+const moons = [];
 
-function makePlanet(path, position, scale) {
-    const material = new THREE.SpriteMaterial({
+function makePlanet(path, position, radius, tilt, rotationSpeed) {
+    const material = new THREE.MeshStandardMaterial({
         map: loadTexture(path),
-        transparent: true,
-        opacity: 1,
-        alphaTest: 0.02,
-        depthWrite: false,
-        fog: true,
-        toneMapped: true,
+        roughness: 0.92,
+        metalness: 0,
     });
-    const sprite = new THREE.Sprite(material);
-    sprite.position.copy(position);
-    sprite.scale.set(scale.x, scale.y, 1);
-    sprite.userData.origin = position.clone();
-    scene.add(sprite);
-    return sprite;
+    const planet = new THREE.Mesh(planetGeometry, material);
+    planet.position.copy(position);
+    planet.scale.setScalar(radius);
+    planet.rotation.z = tilt;
+    planet.userData.rotationSpeed = rotationSpeed;
+    scene.add(planet);
+    planets.push(planet);
+    return planet;
 }
 
 const jupiter = makePlanet(
-    "assets/jupiter.png",
-    new THREE.Vector3(-17, 7.5, -58),
-    new THREE.Vector2(13, 13),
+    "assets/jupiter-map.jpg",
+    new THREE.Vector3(-21, 8, -36),
+    5.2,
+    -0.05,
+    0.012,
 );
-const saturn = makePlanet(
-    "assets/saturn.png",
-    new THREE.Vector3(21, -8, -78),
-    new THREE.Vector2(20, 13.1),
+const earth = makePlanet(
+    "assets/earth-map.jpg",
+    new THREE.Vector3(25, -7, -30),
+    3.2,
+    -0.4,
+    0.018,
 );
+const mars = makePlanet(
+    "assets/mars-map.jpg",
+    new THREE.Vector3(-18, 9, 31),
+    3.5,
+    0.16,
+    0.014,
+);
+
+const atmosphere = new THREE.Mesh(
+    planetGeometry,
+    new THREE.MeshBasicMaterial({
+        color: 0x6fa9ff,
+        transparent: true,
+        opacity: 0.1,
+        side: THREE.BackSide,
+        blending: THREE.AdditiveBlending,
+    }),
+);
+atmosphere.scale.setScalar(1.035);
+earth.add(atmosphere);
+
+function addMoon(parent, radius, distance, speed, color, inclination, phase) {
+    const moon = new THREE.Mesh(
+        new THREE.SphereGeometry(radius, 24, 16),
+        new THREE.MeshStandardMaterial({ color, roughness: 1 }),
+    );
+    moon.userData = { parent, distance, speed, inclination, phase };
+    scene.add(moon);
+    moons.push(moon);
+}
+
+addMoon(earth, 0.55, 5.1, 0.09, 0xb8b5ad, 0.35, 0.4);
+addMoon(jupiter, 0.42, 7.2, 0.055, 0xd9c7a0, 0.18, 0);
+addMoon(jupiter, 0.34, 8.6, 0.042, 0xb5a990, -0.24, 2);
+addMoon(jupiter, 0.5, 10.2, 0.03, 0xc2b7a5, 0.3, 4);
 
 const starTexture = loadTexture("assets/star-disc.png");
 const glowTexture = loadTexture("assets/star-glow.png");
-
-function makeStarfield(count, spread, depth, size, opacity) {
-    const positions = new Float32Array(count * 3);
-    const colors = new Float32Array(count * 3);
-
-    for (let i = 0; i < count; i += 1) {
-        const i3 = i * 3;
-        positions[i3] = THREE.MathUtils.randFloatSpread(spread);
-        positions[i3 + 1] = THREE.MathUtils.randFloatSpread(spread * 0.62);
-        positions[i3 + 2] = THREE.MathUtils.randFloat(-depth, 6);
-
-        const warmth = Math.random();
-        colors[i3] = warmth > 0.78 ? 1 : 0.66;
-        colors[i3 + 1] = warmth > 0.78 ? 0.73 : 0.77;
-        colors[i3 + 2] = warmth > 0.78 ? 0.53 : 1;
-    }
-
-    const geometry = new THREE.BufferGeometry();
-    geometry.setAttribute("position", new THREE.BufferAttribute(positions, 3));
-    geometry.setAttribute("color", new THREE.BufferAttribute(colors, 3));
-
-    return new THREE.Points(
-        geometry,
-        new THREE.PointsMaterial({
-            size,
-            sizeAttenuation: true,
-            map: starTexture,
-            alphaTest: 0.08,
-            transparent: true,
-            opacity,
-            vertexColors: true,
-            depthWrite: false,
-        }),
-    );
-}
-
-const distantStars = makeStarfield(innerWidth < 700 ? 1050 : 1800, 80, 108, 0.12, 0.75);
-const nearStars = makeStarfield(innerWidth < 700 ? 180 : 320, 30, 70, 0.065, 0.62);
-scene.add(distantStars, nearStars);
 
 const trailCount = 64;
 const trailPositions = new Float32Array(trailCount * 3);
@@ -299,15 +290,6 @@ function updatePlayer(delta) {
     peanutPivot.rotation.y += delta * 0.16;
 }
 
-function driftStars(starfield, delta, speed, resetDepth) {
-    const positions = starfield.geometry.attributes.position.array;
-    for (let i = 2; i < positions.length; i += 3) {
-        positions[i] += speed * delta;
-        if (positions[i] > 7) positions[i] = -resetDepth;
-    }
-    starfield.geometry.attributes.position.needsUpdate = true;
-}
-
 function updateTrail(delta) {
     if (velocity.lengthSq() < 0.002) return;
     trailAccumulator += delta;
@@ -341,6 +323,21 @@ function updateBlooms() {
     }
 }
 
+function updatePlanets(delta) {
+    for (const planet of planets) {
+        planet.rotation.y += planet.userData.rotationSpeed * delta;
+    }
+    for (const moon of moons) {
+        const { parent, distance, speed, inclination, phase } = moon.userData;
+        const angle = driftTime * speed + phase;
+        moon.position.set(
+            parent.position.x + Math.cos(angle) * distance,
+            parent.position.y + Math.sin(angle) * distance * inclination,
+            parent.position.z + Math.sin(angle) * distance,
+        );
+    }
+}
+
 function resetComet(comet) {
     comet.position.set(
         THREE.MathUtils.randFloat(-16, 5),
@@ -371,10 +368,9 @@ function animate() {
     driftTime += delta;
 
     updatePlayer(delta);
-    driftStars(distantStars, delta, 0.42, 108);
-    driftStars(nearStars, delta, 0.8, 70);
     updateTrail(delta);
     updateBlooms();
+    updatePlanets(delta);
     updateComets(delta);
 
     player.position.z = Math.sin(driftTime * 0.28) * 0.08;
@@ -385,18 +381,6 @@ function animate() {
     controls.target.add(playerDelta);
     lastPlayerPosition.copy(player.position);
     controls.update();
-
-    nebula.position.x = Math.sin(driftTime * 0.018) * 2.5 - player.position.x * 0.08;
-    nebula.position.y = Math.cos(driftTime * 0.014) * 1.5 - player.position.y * 0.06;
-
-    jupiter.position.x = jupiter.userData.origin.x - player.position.x * 0.04
-        + Math.sin(driftTime * 0.025) * 0.45;
-    jupiter.position.y = jupiter.userData.origin.y - player.position.y * 0.035
-        + Math.cos(driftTime * 0.02) * 0.25;
-    saturn.position.x = saturn.userData.origin.x - player.position.x * 0.025
-        + Math.cos(driftTime * 0.018) * 0.35;
-    saturn.position.y = saturn.userData.origin.y - player.position.y * 0.02
-        + Math.sin(driftTime * 0.023) * 0.2;
 
     renderer.render(scene, camera);
     requestAnimationFrame(animate);

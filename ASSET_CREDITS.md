@@ -4,26 +4,32 @@ The space imagery used by the ambient peanut scene is sourced from freely
 reusable NASA material. Credits are kept here so the experience itself can
 remain text-free.
 
-## Cosmic Cliffs
+## 360-degree star map
 
-- File: `assets/cosmic-cliffs.png`
-- Source: [NASA Scientific Visualization Studio](https://svs.gsfc.nasa.gov/31285/)
-- Credit: NASA, ESA, CSA, STScI
-- Usage: NASA Webb material is copyright-free and may be freely used with
-  source credit.
+- File: `assets/star-map-360.jpg`
+- Source: [NASA Scientific Visualization Studio](https://svs.gsfc.nasa.gov/3895/)
+- Credit: NASA/Goddard Space Flight Center Scientific Visualization Studio
+- License: Public domain
 
 ## Jupiter
 
-- File: `assets/jupiter.png`
-- Source: [NASA/JPL image PIA00343 via Wikimedia Commons](https://commons.wikimedia.org/wiki/File:Jupiter_(transparent).png)
-- Credit: NASA/JPL/USGS
+- File: `assets/jupiter-map.jpg`
+- Source: [NASA Cassini cylindrical map PIA07782](https://science.nasa.gov/resource/cassinis-best-maps-of-jupiter-cylindrical-map/)
+- Credit: NASA/JPL/Space Science Institute
 - License: Public domain
 
-## Saturn
+## Earth
 
-- File: `assets/saturn.png`
-- Source: [NASA Voyager 2 image via Wikimedia Commons](https://commons.wikimedia.org/wiki/File:Saturnx.png)
-- Credit: NASA
+- File: `assets/earth-map.jpg`
+- Source: [NASA SVS equirectangular Earth](https://svs.gsfc.nasa.gov/3615/)
+- Credit: NASA/Goddard Space Flight Center Scientific Visualization Studio
+- License: Public domain
+
+## Mars
+
+- File: `assets/mars-map.jpg`
+- Source: [NASA Mars image texture](https://science.nasa.gov/3d-resources/mars/)
+- Credit: NASA/JPL-Caltech/USGS
 - License: Public domain
 
 ## Star sprite
