@@ -21,13 +21,17 @@ renderer.outputColorSpace = THREE.SRGBColorSpace;
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
 renderer.toneMappingExposure = 1;
 
-scene.add(new THREE.HemisphereLight(0x8d9ddd, 0x13080b, 0.75));
+scene.add(new THREE.HemisphereLight(0xb7c5ff, 0x241116, 1.55));
 
-const keyLight = new THREE.DirectionalLight(0xffd2a1, 5.2);
+const keyLight = new THREE.DirectionalLight(0xffd2a1, 3.8);
 keyLight.position.set(18, 12, 15);
 scene.add(keyLight);
 
-const blueLight = new THREE.PointLight(0x5f79ff, 9, 25);
+const fillLight = new THREE.DirectionalLight(0x8fa8ff, 2.1);
+fillLight.position.set(-10, -4, 12);
+scene.add(fillLight);
+
+const blueLight = new THREE.PointLight(0x5f79ff, 16, 28);
 blueLight.position.set(5, -3, 4);
 scene.add(blueLight);
 
@@ -133,6 +137,94 @@ const distantStars = makeStarfield(innerWidth < 700 ? 1050 : 1800, 80, 108, 0.12
 const nearStars = makeStarfield(innerWidth < 700 ? 180 : 320, 30, 70, 0.065, 0.62);
 scene.add(distantStars, nearStars);
 
+const trailCount = 64;
+const trailPositions = new Float32Array(trailCount * 3);
+const trailColors = new Float32Array(trailCount * 3);
+for (let i = 0; i < trailCount; i += 1) {
+    const i3 = i * 3;
+    trailPositions[i3] = 1000;
+    trailPositions[i3 + 1] = 1000;
+    trailPositions[i3 + 2] = 0;
+    const fade = (1 - i / trailCount) ** 2;
+    trailColors[i3] = fade;
+    trailColors[i3 + 1] = fade * 0.48;
+    trailColors[i3 + 2] = fade * 0.16;
+}
+
+const trailGeometry = new THREE.BufferGeometry();
+trailGeometry.setAttribute("position", new THREE.BufferAttribute(trailPositions, 3));
+trailGeometry.setAttribute("color", new THREE.BufferAttribute(trailColors, 3));
+const trail = new THREE.Points(
+    trailGeometry,
+    new THREE.PointsMaterial({
+        size: 0.12,
+        sizeAttenuation: true,
+        map: starTexture,
+        transparent: true,
+        opacity: 0.7,
+        vertexColors: true,
+        depthWrite: false,
+        blending: THREE.AdditiveBlending,
+    }),
+);
+scene.add(trail);
+
+const bloomColors = [0xffb56f, 0x8fb8ff, 0xd6a0ff, 0x81ffe1];
+const bloomOrigins = [
+    new THREE.Vector3(-3.45, 1.85, -1.8),
+    new THREE.Vector3(3.5, 1.7, -2.2),
+    new THREE.Vector3(-2.9, -2.05, -2),
+    new THREE.Vector3(3.3, -1.9, -1.7),
+];
+const blooms = bloomOrigins.map((origin, index) => {
+    const group = new THREE.Group();
+    const haloMaterial = new THREE.SpriteMaterial({
+        map: starTexture,
+        color: bloomColors[index],
+        transparent: true,
+        opacity: 0.18,
+        depthWrite: false,
+        blending: THREE.AdditiveBlending,
+    });
+    const halo = new THREE.Sprite(haloMaterial);
+    halo.scale.setScalar(1.05);
+    const core = new THREE.Sprite(haloMaterial.clone());
+    core.material.opacity = 0.72;
+    core.scale.setScalar(0.16);
+    const light = new THREE.PointLight(bloomColors[index], 3, 7, 2);
+    group.add(halo, core, light);
+    group.position.copy(origin);
+    group.userData = { origin, halo, core, light, phase: index * 1.7 };
+    scene.add(group);
+    return group;
+});
+
+function makeComet(delay) {
+    const geometry = new THREE.BufferGeometry();
+    geometry.setAttribute(
+        "position",
+        new THREE.Float32BufferAttribute([0, 0, 0, -3.2, 0.8, -0.3], 3),
+    );
+    const material = new THREE.LineBasicMaterial({
+        color: 0xb9ccff,
+        transparent: true,
+        opacity: 0,
+        depthWrite: false,
+        blending: THREE.AdditiveBlending,
+    });
+    const line = new THREE.Line(geometry, material);
+    line.position.set(
+        THREE.MathUtils.randFloat(-16, 5),
+        THREE.MathUtils.randFloat(3, 8),
+        THREE.MathUtils.randFloat(-45, -25),
+    );
+    line.userData = { delay, age: 0, duration: 5.5 };
+    scene.add(line);
+    return line;
+}
+
+const comets = [makeComet(2.5), makeComet(10)];
+
 const dracoLoader = new DRACOLoader();
 dracoLoader.setDecoderPath("https://cdn.jsdelivr.net/npm/three@0.180.0/examples/jsm/libs/draco/");
 
@@ -155,6 +247,7 @@ const velocity = new THREE.Vector2();
 const desiredVelocity = new THREE.Vector2();
 const clock = new THREE.Clock();
 let driftTime = 0;
+let trailAccumulator = 0;
 
 function updatePlayer(delta) {
     const horizontal = Number(keys.has("ArrowRight") || keys.has("KeyD"))
@@ -180,6 +273,7 @@ function updatePlayer(delta) {
 
     camera.position.x = THREE.MathUtils.damp(camera.position.x, player.position.x * 0.045, 0.65, delta);
     camera.position.y = THREE.MathUtils.damp(camera.position.y, 0.25 + player.position.y * 0.035, 0.65, delta);
+    camera.rotation.z = THREE.MathUtils.damp(camera.rotation.z, -velocity.x * 0.012, 0.8, delta);
 }
 
 function driftStars(starfield, delta, speed, resetDepth) {
@@ -191,6 +285,64 @@ function driftStars(starfield, delta, speed, resetDepth) {
     starfield.geometry.attributes.position.needsUpdate = true;
 }
 
+function updateTrail(delta) {
+    if (velocity.lengthSq() < 0.002) return;
+    trailAccumulator += delta;
+    if (trailAccumulator < 0.035) return;
+    trailAccumulator = 0;
+
+    for (let i = trailPositions.length - 1; i >= 3; i -= 1) {
+        trailPositions[i] = trailPositions[i - 3];
+    }
+    trailPositions[0] = player.position.x;
+    trailPositions[1] = player.position.y;
+    trailPositions[2] = player.position.z + 0.1;
+    trailGeometry.attributes.position.needsUpdate = true;
+}
+
+function updateBlooms() {
+    for (const bloom of blooms) {
+        const { origin, halo, core, light, phase } = bloom.userData;
+        bloom.position.x = origin.x + Math.sin(driftTime * 0.22 + phase) * 0.16;
+        bloom.position.y = origin.y + Math.cos(driftTime * 0.18 + phase) * 0.12;
+        const distance = Math.hypot(
+            bloom.position.x - player.position.x,
+            bloom.position.y - player.position.y,
+        );
+        const proximity = THREE.MathUtils.clamp(1 - distance / 2.2, 0, 1);
+        const pulse = 0.5 + Math.sin(driftTime * 1.25 + phase) * 0.5;
+        halo.material.opacity = 0.12 + pulse * 0.08 + proximity * 0.3;
+        halo.scale.setScalar(0.9 + pulse * 0.2 + proximity * 0.5);
+        core.material.opacity = 0.58 + pulse * 0.22;
+        light.intensity = 2 + proximity * 22;
+    }
+}
+
+function resetComet(comet) {
+    comet.position.set(
+        THREE.MathUtils.randFloat(-16, 5),
+        THREE.MathUtils.randFloat(3, 8),
+        THREE.MathUtils.randFloat(-45, -25),
+    );
+    comet.userData.age = 0;
+    comet.userData.delay = THREE.MathUtils.randFloat(9, 20);
+}
+
+function updateComets(delta) {
+    for (const comet of comets) {
+        if (comet.userData.delay > 0) {
+            comet.userData.delay -= delta;
+            continue;
+        }
+        comet.userData.age += delta;
+        const progress = comet.userData.age / comet.userData.duration;
+        comet.position.x += delta * 2.25;
+        comet.position.y -= delta * 0.56;
+        comet.material.opacity = Math.sin(Math.min(progress, 1) * Math.PI) * 0.36;
+        if (progress >= 1) resetComet(comet);
+    }
+}
+
 function animate() {
     const delta = Math.min(clock.getDelta(), 0.05);
     driftTime += delta;
@@ -198,6 +350,9 @@ function animate() {
     updatePlayer(delta);
     driftStars(distantStars, delta, 0.42, 108);
     driftStars(nearStars, delta, 0.8, 70);
+    updateTrail(delta);
+    updateBlooms();
+    updateComets(delta);
 
     player.position.z = Math.sin(driftTime * 0.28) * 0.08;
     player.rotation.y = Math.sin(driftTime * 0.18) * 0.05;
@@ -205,10 +360,14 @@ function animate() {
     nebula.position.x = Math.sin(driftTime * 0.018) * 2.5 - player.position.x * 0.08;
     nebula.position.y = Math.cos(driftTime * 0.014) * 1.5 - player.position.y * 0.06;
 
-    jupiter.position.x = jupiter.userData.origin.x - player.position.x * 0.04;
-    jupiter.position.y = jupiter.userData.origin.y - player.position.y * 0.035;
-    saturn.position.x = saturn.userData.origin.x - player.position.x * 0.025;
-    saturn.position.y = saturn.userData.origin.y - player.position.y * 0.02;
+    jupiter.position.x = jupiter.userData.origin.x - player.position.x * 0.04
+        + Math.sin(driftTime * 0.025) * 0.45;
+    jupiter.position.y = jupiter.userData.origin.y - player.position.y * 0.035
+        + Math.cos(driftTime * 0.02) * 0.25;
+    saturn.position.x = saturn.userData.origin.x - player.position.x * 0.025
+        + Math.cos(driftTime * 0.018) * 0.35;
+    saturn.position.y = saturn.userData.origin.y - player.position.y * 0.02
+        + Math.sin(driftTime * 0.023) * 0.2;
 
     renderer.render(scene, camera);
     requestAnimationFrame(animate);
