@@ -24,7 +24,7 @@ renderer.toneMappingExposure = 1;
 scene.add(new THREE.HemisphereLight(0x8d9ddd, 0x13080b, 0.75));
 
 const sunLight = new THREE.DirectionalLight(0xffd2a1, 5.2);
-sunLight.position.set(18, 12, -20);
+sunLight.position.set(18, 12, 15);
 scene.add(sunLight);
 
 const blueLight = new THREE.PointLight(0x5f79ff, 9, 25);
@@ -92,9 +92,13 @@ const saturn = makePlanet(
     new THREE.Vector2(20, 13.1),
 );
 
+const sunTexture = loadTexture("assets/sun.png");
+sunTexture.repeat.set(0.92, 0.92);
+sunTexture.offset.set(0.04, 0.04);
+
 const sun = new THREE.Sprite(
     new THREE.SpriteMaterial({
-        map: loadTexture("assets/sun.png"),
+        map: sunTexture,
         color: 0xffc08a,
         transparent: true,
         opacity: 0.82,
