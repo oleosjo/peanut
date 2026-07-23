@@ -48,7 +48,7 @@ function loadTexture(path, colorSpace = THREE.SRGBColorSpace) {
     return texture;
 }
 
-const nebulaTexture = loadTexture("assets/pillars-of-creation.png");
+const nebulaTexture = loadTexture("assets/cosmic-cliffs.png");
 nebulaTexture.minFilter = THREE.LinearMipmapLinearFilter;
 
 const nebulaMaterial = new THREE.MeshBasicMaterial({
