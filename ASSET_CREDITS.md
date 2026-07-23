@@ -26,13 +26,6 @@ remain text-free.
 - Credit: NASA
 - License: Public domain
 
-## Sun
-
-- File: `assets/sun.png`
-- Source: [NASA SDO composite via OpenGameArt](https://opengameart.org/content/the-sun)
-- Credit: NASA/SDO and LFA
-- License: Public domain / CC0
-
 ## Star sprite
 
 - File: `assets/star-disc.png`

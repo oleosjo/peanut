@@ -23,9 +23,9 @@ renderer.toneMappingExposure = 1;
 
 scene.add(new THREE.HemisphereLight(0x8d9ddd, 0x13080b, 0.75));
 
-const sunLight = new THREE.DirectionalLight(0xffd2a1, 5.2);
-sunLight.position.set(18, 12, 15);
-scene.add(sunLight);
+const keyLight = new THREE.DirectionalLight(0xffd2a1, 5.2);
+keyLight.position.set(18, 12, 15);
+scene.add(keyLight);
 
 const blueLight = new THREE.PointLight(0x5f79ff, 9, 25);
 blueLight.position.set(5, -3, 4);
@@ -91,26 +91,6 @@ const saturn = makePlanet(
     new THREE.Vector3(21, -8, -78),
     new THREE.Vector2(20, 13.1),
 );
-
-const sunTexture = loadTexture("assets/sun.png");
-sunTexture.repeat.set(0.92, 0.92);
-sunTexture.offset.set(0.04, 0.04);
-
-const sun = new THREE.Sprite(
-    new THREE.SpriteMaterial({
-        map: sunTexture,
-        color: 0xffc08a,
-        transparent: true,
-        opacity: 0.82,
-        blending: THREE.AdditiveBlending,
-        depthWrite: false,
-        fog: true,
-    }),
-);
-sun.position.set(28, 16, -62);
-sun.scale.set(11, 10.7, 1);
-sun.userData.origin = sun.position.clone();
-scene.add(sun);
 
 const starTexture = loadTexture("assets/star-disc.png");
 
@@ -229,8 +209,6 @@ function animate() {
     jupiter.position.y = jupiter.userData.origin.y - player.position.y * 0.035;
     saturn.position.x = saturn.userData.origin.x - player.position.x * 0.025;
     saturn.position.y = saturn.userData.origin.y - player.position.y * 0.02;
-    sun.position.x = sun.userData.origin.x - player.position.x * 0.035;
-    sun.position.y = sun.userData.origin.y - player.position.y * 0.03;
 
     renderer.render(scene, camera);
     requestAnimationFrame(animate);
