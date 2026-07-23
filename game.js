@@ -70,7 +70,7 @@ const skyTexture = loadTexture("assets/star-map-360.jpg");
 skyTexture.mapping = THREE.EquirectangularReflectionMapping;
 skyTexture.minFilter = THREE.LinearMipmapLinearFilter;
 scene.background = skyTexture;
-scene.backgroundIntensity = 0.72;
+scene.backgroundIntensity = 0.48;
 
 const planetGeometry = new THREE.SphereGeometry(1, 64, 32);
 const planets = [];
@@ -144,6 +144,39 @@ addMoon(jupiter, 0.5, 10.2, 0.03, 0xc2b7a5, 0.3, 4);
 
 const starTexture = loadTexture("assets/star-disc.png");
 const glowTexture = loadTexture("assets/star-glow.png");
+
+const spaceStarCount = innerWidth < 700 ? 2200 : 4200;
+const spaceStarPositions = new Float32Array(spaceStarCount * 3);
+const spaceStarColors = new Float32Array(spaceStarCount * 3);
+for (let i = 0; i < spaceStarCount; i += 1) {
+    const i3 = i * 3;
+    spaceStarPositions[i3] = THREE.MathUtils.randFloatSpread(360);
+    spaceStarPositions[i3 + 1] = THREE.MathUtils.randFloatSpread(260);
+    spaceStarPositions[i3 + 2] = THREE.MathUtils.randFloat(-220, 180);
+    const warmth = Math.random();
+    spaceStarColors[i3] = warmth > 0.84 ? 1 : 0.68;
+    spaceStarColors[i3 + 1] = warmth > 0.84 ? 0.75 : 0.79;
+    spaceStarColors[i3 + 2] = warmth > 0.84 ? 0.58 : 1;
+}
+
+const spaceStarGeometry = new THREE.BufferGeometry();
+spaceStarGeometry.setAttribute("position", new THREE.BufferAttribute(spaceStarPositions, 3));
+spaceStarGeometry.setAttribute("color", new THREE.BufferAttribute(spaceStarColors, 3));
+const spaceStars = new THREE.Points(
+    spaceStarGeometry,
+    new THREE.PointsMaterial({
+        size: 1.35,
+        sizeAttenuation: false,
+        map: starTexture,
+        alphaTest: 0.08,
+        transparent: true,
+        opacity: 0.78,
+        vertexColors: true,
+        depthWrite: false,
+        blending: THREE.AdditiveBlending,
+    }),
+);
+scene.add(spaceStars);
 
 const trailCount = 64;
 const trailPositions = new Float32Array(trailCount * 3);
@@ -310,6 +343,7 @@ function updateBlooms() {
         const { origin, halo, core, light, phase } = bloom.userData;
         bloom.position.x = origin.x + Math.sin(driftTime * 0.22 + phase) * 0.16;
         bloom.position.y = origin.y + Math.cos(driftTime * 0.18 + phase) * 0.12;
+        bloom.position.z = player.position.z + origin.z;
         const distance = Math.hypot(
             bloom.position.x - player.position.x,
             bloom.position.y - player.position.y,
@@ -321,6 +355,20 @@ function updateBlooms() {
         core.material.opacity = 0.58 + pulse * 0.22;
         light.intensity = 2 + proximity * 22;
     }
+}
+
+function updateSpaceStars() {
+    let changed = false;
+    for (let i = 0; i < spaceStarCount; i += 1) {
+        const i3 = i * 3;
+        if (spaceStarPositions[i3 + 2] > player.position.z + 180) {
+            spaceStarPositions[i3] = player.position.x + THREE.MathUtils.randFloatSpread(360);
+            spaceStarPositions[i3 + 1] = player.position.y + THREE.MathUtils.randFloatSpread(260);
+            spaceStarPositions[i3 + 2] = player.position.z - THREE.MathUtils.randFloat(190, 230);
+            changed = true;
+        }
+    }
+    if (changed) spaceStarGeometry.attributes.position.needsUpdate = true;
 }
 
 function updatePlanets(delta) {
@@ -342,7 +390,7 @@ function resetComet(comet) {
     comet.position.set(
         THREE.MathUtils.randFloat(-16, 5),
         THREE.MathUtils.randFloat(3, 8),
-        THREE.MathUtils.randFloat(-45, -25),
+        player.position.z - THREE.MathUtils.randFloat(25, 45),
     );
     comet.userData.age = 0;
     comet.userData.delay = THREE.MathUtils.randFloat(9, 20);
@@ -368,13 +416,14 @@ function animate() {
     driftTime += delta;
 
     updatePlayer(delta);
+    player.position.z = -driftTime * 0.32 + Math.sin(driftTime * 0.28) * 0.08;
+    player.rotation.y = Math.sin(driftTime * 0.18) * 0.05;
+
     updateTrail(delta);
     updateBlooms();
+    updateSpaceStars();
     updatePlanets(delta);
     updateComets(delta);
-
-    player.position.z = Math.sin(driftTime * 0.28) * 0.08;
-    player.rotation.y = Math.sin(driftTime * 0.18) * 0.05;
 
     playerDelta.copy(player.position).sub(lastPlayerPosition);
     camera.position.add(playerDelta);
