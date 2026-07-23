@@ -50,6 +50,8 @@ function loadTexture(path, colorSpace = THREE.SRGBColorSpace) {
 
 const nebulaTexture = loadTexture("assets/cosmic-cliffs.png");
 nebulaTexture.minFilter = THREE.LinearMipmapLinearFilter;
+nebulaTexture.repeat.set(1, 0.66);
+nebulaTexture.offset.set(0, 0.15);
 
 const nebulaMaterial = new THREE.MeshBasicMaterial({
     map: nebulaTexture,
@@ -57,7 +59,7 @@ const nebulaMaterial = new THREE.MeshBasicMaterial({
     fog: false,
     depthWrite: false,
 });
-const nebula = new THREE.Mesh(new THREE.PlaneGeometry(180, 101.25), nebulaMaterial);
+const nebula = new THREE.Mesh(new THREE.PlaneGeometry(350, 130), nebulaMaterial);
 nebula.position.set(0, 0, -115);
 scene.add(nebula);
 
