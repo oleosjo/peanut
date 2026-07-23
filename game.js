@@ -20,7 +20,7 @@ renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
 renderer.setSize(innerWidth, innerHeight);
 renderer.outputColorSpace = THREE.SRGBColorSpace;
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
-renderer.toneMappingExposure = 1;
+renderer.toneMappingExposure = 1.08;
 
 scene.add(new THREE.HemisphereLight(0xb7c5ff, 0x241116, 1.55));
 
@@ -70,7 +70,7 @@ const skyTexture = loadTexture("assets/star-map-360.jpg");
 skyTexture.mapping = THREE.EquirectangularReflectionMapping;
 skyTexture.minFilter = THREE.LinearMipmapLinearFilter;
 scene.background = skyTexture;
-scene.backgroundIntensity = 0.48;
+scene.backgroundIntensity = 0.82;
 
 const planetGeometry = new THREE.SphereGeometry(1, 64, 32);
 const planets = [];
@@ -145,7 +145,7 @@ addMoon(jupiter, 0.5, 10.2, 0.03, 0xc2b7a5, 0.3, 4);
 const starTexture = loadTexture("assets/star-disc.png");
 const glowTexture = loadTexture("assets/star-glow.png");
 
-const spaceStarCount = innerWidth < 700 ? 2200 : 4200;
+const spaceStarCount = innerWidth < 700 ? 3000 : 5600;
 const spaceStarPositions = new Float32Array(spaceStarCount * 3);
 const spaceStarColors = new Float32Array(spaceStarCount * 3);
 for (let i = 0; i < spaceStarCount; i += 1) {
@@ -165,12 +165,12 @@ spaceStarGeometry.setAttribute("color", new THREE.BufferAttribute(spaceStarColor
 const spaceStars = new THREE.Points(
     spaceStarGeometry,
     new THREE.PointsMaterial({
-        size: 1.35,
+        size: 1.5,
         sizeAttenuation: false,
         map: starTexture,
         alphaTest: 0.08,
         transparent: true,
-        opacity: 0.78,
+        opacity: 0.88,
         vertexColors: true,
         depthWrite: false,
         blending: THREE.AdditiveBlending,
