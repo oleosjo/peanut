@@ -25,3 +25,17 @@ remain text-free.
 - Source: [NASA Voyager 2 image via Wikimedia Commons](https://commons.wikimedia.org/wiki/File:Saturnx.png)
 - Credit: NASA
 - License: Public domain
+
+## Sun
+
+- File: `assets/sun.png`
+- Source: [NASA image via Wikimedia Commons](https://commons.wikimedia.org/wiki/File:Red_Hot_Sun.PNG)
+- Credit: NASA
+- License: Public domain
+
+## Star sprite
+
+- File: `assets/star-disc.png`
+- Source: [Three.js example textures](https://github.com/mrdoob/three.js/blob/r180/examples/textures/sprites/disc.png)
+- Credit: Three.js contributors
+- License: MIT

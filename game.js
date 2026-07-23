@@ -21,11 +21,11 @@ renderer.outputColorSpace = THREE.SRGBColorSpace;
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
 renderer.toneMappingExposure = 1;
 
-scene.add(new THREE.HemisphereLight(0xa7b7ff, 0x170b0d, 1.25));
+scene.add(new THREE.HemisphereLight(0x8d9ddd, 0x13080b, 0.75));
 
-const keyLight = new THREE.DirectionalLight(0xffd3a8, 4.2);
-keyLight.position.set(-4, 5, 7);
-scene.add(keyLight);
+const sunLight = new THREE.DirectionalLight(0xffd2a1, 5.2);
+sunLight.position.set(18, 12, -20);
+scene.add(sunLight);
 
 const blueLight = new THREE.PointLight(0x5f79ff, 9, 25);
 blueLight.position.set(5, -3, 4);
@@ -63,11 +63,12 @@ const nebula = new THREE.Mesh(new THREE.PlaneGeometry(350, 130), nebulaMaterial)
 nebula.position.set(0, 0, -115);
 scene.add(nebula);
 
-function makePlanet(path, position, scale, opacity) {
+function makePlanet(path, position, scale) {
     const material = new THREE.SpriteMaterial({
         map: loadTexture(path),
         transparent: true,
-        opacity,
+        opacity: 1,
+        alphaTest: 0.02,
         depthWrite: false,
         fog: true,
         toneMapped: true,
@@ -84,14 +85,30 @@ const jupiter = makePlanet(
     "assets/jupiter.png",
     new THREE.Vector3(-17, 7.5, -58),
     new THREE.Vector2(13, 13),
-    0.72,
 );
 const saturn = makePlanet(
     "assets/saturn.png",
     new THREE.Vector3(21, -8, -78),
     new THREE.Vector2(20, 13.1),
-    0.6,
 );
+
+const sun = new THREE.Sprite(
+    new THREE.SpriteMaterial({
+        map: loadTexture("assets/sun.png"),
+        color: 0xffc08a,
+        transparent: true,
+        opacity: 0.82,
+        blending: THREE.AdditiveBlending,
+        depthWrite: false,
+        fog: true,
+    }),
+);
+sun.position.set(28, 16, -62);
+sun.scale.set(11, 10.7, 1);
+sun.userData.origin = sun.position.clone();
+scene.add(sun);
+
+const starTexture = loadTexture("assets/star-disc.png");
 
 function makeStarfield(count, spread, depth, size, opacity) {
     const positions = new Float32Array(count * 3);
@@ -118,6 +135,8 @@ function makeStarfield(count, spread, depth, size, opacity) {
         new THREE.PointsMaterial({
             size,
             sizeAttenuation: true,
+            map: starTexture,
+            alphaTest: 0.08,
             transparent: true,
             opacity,
             vertexColors: true,
@@ -126,8 +145,8 @@ function makeStarfield(count, spread, depth, size, opacity) {
     );
 }
 
-const distantStars = makeStarfield(innerWidth < 700 ? 700 : 1100, 80, 108, 0.1, 0.72);
-const nearStars = makeStarfield(innerWidth < 700 ? 120 : 220, 30, 70, 0.045, 0.58);
+const distantStars = makeStarfield(innerWidth < 700 ? 1050 : 1800, 80, 108, 0.12, 0.75);
+const nearStars = makeStarfield(innerWidth < 700 ? 180 : 320, 30, 70, 0.065, 0.62);
 scene.add(distantStars, nearStars);
 
 const dracoLoader = new DRACOLoader();
@@ -139,7 +158,7 @@ modelLoader.load("peanut.glb", ({ scene: model }) => {
     const bounds = new THREE.Box3().setFromObject(model);
     const size = bounds.getSize(new THREE.Vector3());
     const center = bounds.getCenter(new THREE.Vector3());
-    const scale = 2.15 / Math.max(size.x, size.y, size.z);
+    const scale = 1.55 / Math.max(size.x, size.y, size.z);
 
     model.position.sub(center);
     model.scale.setScalar(scale);
@@ -206,6 +225,8 @@ function animate() {
     jupiter.position.y = jupiter.userData.origin.y - player.position.y * 0.035;
     saturn.position.x = saturn.userData.origin.x - player.position.x * 0.025;
     saturn.position.y = saturn.userData.origin.y - player.position.y * 0.02;
+    sun.position.x = sun.userData.origin.x - player.position.x * 0.035;
+    sun.position.y = sun.userData.origin.y - player.position.y * 0.03;
 
     renderer.render(scene, camera);
     requestAnimationFrame(animate);
