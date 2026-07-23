@@ -1,6 +1,7 @@
 import * as THREE from "three";
 import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
 import { DRACOLoader } from "three/addons/loaders/DRACOLoader.js";
+import { OrbitControls } from "three/addons/controls/OrbitControls.js";
 
 const canvas = document.querySelector("#space");
 const scene = new THREE.Scene();
@@ -41,6 +42,21 @@ scene.add(player);
 
 const peanutPivot = new THREE.Group();
 player.add(peanutPivot);
+
+const controls = new OrbitControls(camera, canvas);
+controls.target.copy(player.position);
+controls.enableDamping = true;
+controls.dampingFactor = 0.045;
+controls.enablePan = true;
+controls.screenSpacePanning = true;
+controls.minDistance = 4.5;
+controls.maxDistance = 12;
+controls.minPolarAngle = Math.PI / 2 - 0.3;
+controls.maxPolarAngle = Math.PI / 2 + 0.3;
+controls.minAzimuthAngle = -0.45;
+controls.maxAzimuthAngle = 0.45;
+controls.zoomToCursor = true;
+controls.update();
 
 const textureLoader = new THREE.TextureLoader();
 const maxAnisotropy = renderer.capabilities.getMaxAnisotropy();
@@ -255,6 +271,8 @@ const keys = new Set();
 const velocity = new THREE.Vector2();
 const desiredVelocity = new THREE.Vector2();
 const clock = new THREE.Clock();
+const lastPlayerPosition = player.position.clone();
+const playerDelta = new THREE.Vector3();
 let driftTime = 0;
 let trailAccumulator = 0;
 
@@ -264,25 +282,21 @@ function updatePlayer(delta) {
     const vertical = Number(keys.has("ArrowUp") || keys.has("KeyW"))
         - Number(keys.has("ArrowDown") || keys.has("KeyS"));
 
-    desiredVelocity.set(horizontal * 0.75, vertical * 0.62);
-    velocity.x = THREE.MathUtils.damp(velocity.x, desiredVelocity.x, 1.25, delta);
-    velocity.y = THREE.MathUtils.damp(velocity.y, desiredVelocity.y, 1.25, delta);
+    desiredVelocity.set(horizontal * 1, vertical * 0.82);
+    velocity.x = THREE.MathUtils.damp(velocity.x, desiredVelocity.x, 1.4, delta);
+    velocity.y = THREE.MathUtils.damp(velocity.y, desiredVelocity.y, 1.4, delta);
 
     player.position.x += velocity.x * delta;
     player.position.y += velocity.y * delta;
 
-    const horizontalLimit = innerWidth < 700 ? 2.3 : 4.2;
-    const verticalLimit = innerWidth < 700 ? 3.2 : 2.55;
+    const horizontalLimit = innerWidth < 700 ? 2.7 : 4.8;
+    const verticalLimit = innerWidth < 700 ? 3.5 : 2.9;
     player.position.x = THREE.MathUtils.clamp(player.position.x, -horizontalLimit, horizontalLimit);
     player.position.y = THREE.MathUtils.clamp(player.position.y, -verticalLimit, verticalLimit);
 
     player.rotation.z = THREE.MathUtils.damp(player.rotation.z, -velocity.x * 0.32, 1.2, delta);
     player.rotation.x = THREE.MathUtils.damp(player.rotation.x, velocity.y * 0.16, 1.2, delta);
     peanutPivot.rotation.y += delta * 0.16;
-
-    camera.position.x = THREE.MathUtils.damp(camera.position.x, player.position.x * 0.045, 0.65, delta);
-    camera.position.y = THREE.MathUtils.damp(camera.position.y, 0.25 + player.position.y * 0.035, 0.65, delta);
-    camera.rotation.z = THREE.MathUtils.damp(camera.rotation.z, -velocity.x * 0.012, 0.8, delta);
 }
 
 function driftStars(starfield, delta, speed, resetDepth) {
@@ -365,6 +379,12 @@ function animate() {
 
     player.position.z = Math.sin(driftTime * 0.28) * 0.08;
     player.rotation.y = Math.sin(driftTime * 0.18) * 0.05;
+
+    playerDelta.copy(player.position).sub(lastPlayerPosition);
+    camera.position.add(playerDelta);
+    controls.target.add(playerDelta);
+    lastPlayerPosition.copy(player.position);
+    controls.update();
 
     nebula.position.x = Math.sin(driftTime * 0.018) * 2.5 - player.position.x * 0.08;
     nebula.position.y = Math.cos(driftTime * 0.014) * 1.5 - player.position.y * 0.06;
