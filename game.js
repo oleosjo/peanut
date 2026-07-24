@@ -78,19 +78,45 @@ scene.backgroundIntensity = 0.82;
 const nebulaTexture = loadTexture("assets/cosmic-cliffs.png");
 nebulaTexture.repeat.set(1, 0.66);
 nebulaTexture.offset.set(0, 0.15);
-const distantNebula = new THREE.Sprite(
-    new THREE.SpriteMaterial({
-        map: nebulaTexture,
-        color: 0x8b7daf,
+const distantNebula = new THREE.Mesh(
+    new THREE.PlaneGeometry(95, 35),
+    new THREE.ShaderMaterial({
+        uniforms: {
+            map: { value: nebulaTexture },
+            tint: { value: new THREE.Color(0x8b7daf) },
+            opacity: { value: 0.42 },
+        },
+        vertexShader: `
+            varying vec2 vUv;
+            void main() {
+                vUv = uv;
+                gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+            }
+        `,
+        fragmentShader: `
+            uniform sampler2D map;
+            uniform vec3 tint;
+            uniform float opacity;
+            varying vec2 vUv;
+            void main() {
+                vec3 image = texture2D(map, vUv).rgb;
+                float luminance = max(image.r, max(image.g, image.b));
+                float horizontal = smoothstep(0.0, 0.12, vUv.x)
+                    * smoothstep(0.0, 0.12, 1.0 - vUv.x);
+                float vertical = smoothstep(0.0, 0.16, vUv.y)
+                    * smoothstep(0.0, 0.16, 1.0 - vUv.y);
+                float alpha = smoothstep(0.025, 0.16, luminance)
+                    * horizontal * vertical * opacity;
+                gl_FragColor = vec4(image * tint, alpha);
+            }
+        `,
         transparent: true,
-        opacity: 0.3,
         depthWrite: false,
         blending: THREE.AdditiveBlending,
         fog: false,
     }),
 );
 distantNebula.position.set(-95, 45, -165);
-distantNebula.scale.set(95, 35, 1);
 scene.add(distantNebula);
 
 const planetGeometry = new THREE.SphereGeometry(1, 64, 32);
@@ -331,6 +357,7 @@ modelLoader.load("peanut.glb", ({ scene: model }) => {
     model.scale.setScalar(scale);
     peanutPivot.add(model);
     peanutPivot.rotation.set(0.15, -0.25, -0.3);
+    canvas.dataset.peanutLoaded = "true";
 });
 
 const keys = new Set();
@@ -508,6 +535,7 @@ function animate() {
     controls.target.add(playerDelta);
     lastPlayerPosition.copy(player.position);
     controls.update();
+    distantNebula.quaternion.copy(camera.quaternion);
 
     renderer.render(scene, camera);
     requestAnimationFrame(animate);
