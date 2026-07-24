@@ -54,6 +54,20 @@ remain text-free.
 - Credit: NASA/JPL/Caltech
 - License: Public domain
 
+## Moon surfaces
+
+- File: `assets/moon-map.jpg`
+- Source: [NASA SVS CGI Moon Kit](https://svs.gsfc.nasa.gov/4720/)
+- Credit: NASA/Goddard Space Flight Center Scientific Visualization Studio
+- License: Public domain
+
+## Triton surface
+
+- File: `assets/triton-map.jpg`
+- Source: [NASA Neptune–Triton image texture](https://science.nasa.gov/3d-resources/neptune-triton/)
+- Credit: USGS/Tammy Becker and JPL/Caltech
+- Usage: Free NASA 3D resource
+
 ## Star sprite
 
 - Files: `assets/star-disc.png`, `assets/star-glow.png`

@@ -196,28 +196,82 @@ addAtmosphere(earth, 0x6fa9ff, 0.1);
 addAtmosphere(neptune, 0x4f75ff, 0.08, 1.045);
 addAtmosphere(venus, 0xffa64d, 0.07, 1.025);
 
-function addMoon(parent, radius, distance, speed, color, inclination, phase) {
+const lunarTexture = loadTexture("assets/moon-map.jpg");
+const tritonTexture = loadTexture("assets/triton-map.jpg");
+
+function addMoon(parent, radius, distance, speed, texture, color, inclination, phase) {
     const moon = new THREE.Mesh(
-        new THREE.SphereGeometry(radius, 24, 16),
-        new THREE.MeshStandardMaterial({ color, roughness: 1 }),
+        new THREE.SphereGeometry(radius, 32, 20),
+        new THREE.MeshStandardMaterial({ map: texture, color, roughness: 1 }),
     );
-    moon.userData = { parent, distance, speed, inclination, phase };
+    moon.userData = {
+        parent,
+        distance,
+        speed,
+        inclination,
+        phase,
+        rotationSpeed: THREE.MathUtils.randFloat(0.015, 0.04),
+    };
     scene.add(moon);
     moons.push(moon);
 }
 
-addMoon(earth, 40, 380, 0.09, 0xb8b5ad, 0.35, 0.4);
-addMoon(jupiter, 20, 380, 0.055, 0xd9c7a0, 0.18, 0);
-addMoon(jupiter, 18, 500, 0.042, 0xb5a990, -0.24, 2);
-addMoon(jupiter, 25, 650, 0.03, 0xc2b7a5, 0.3, 4);
-addMoon(neptune, 35, 450, 0.025, 0xb6a894, -0.35, 1.2);
+addMoon(earth, 24, 380, 0.09, lunarTexture, 0xc7c5bf, 0.35, 0.4);
+addMoon(jupiter, 7, 380, 0.055, lunarTexture, 0xd8b883, 0.18, 0);
+addMoon(jupiter, 6, 500, 0.042, lunarTexture, 0xa89d88, -0.24, 2);
+addMoon(jupiter, 8, 650, 0.03, lunarTexture, 0xc4b5a1, 0.3, 4);
+addMoon(neptune, 12, 450, 0.025, tritonTexture, 0xd0c9bb, -0.35, 1.2);
 
 const starTexture = loadTexture("assets/star-disc.png");
 const glowTexture = loadTexture("assets/star-glow.png");
 
+function makeStarMaterial(opacity) {
+    return new THREE.ShaderMaterial({
+        uniforms: {
+            map: { value: starTexture },
+            time: { value: 0 },
+            pixelRatio: { value: renderer.getPixelRatio() },
+            opacity: { value: opacity },
+        },
+        vertexShader: `
+            attribute vec3 color;
+            attribute float phase;
+            attribute float pointSize;
+            uniform float time;
+            uniform float pixelRatio;
+            varying vec3 vColor;
+            varying float vPulse;
+            void main() {
+                vColor = color;
+                vPulse = 0.88 + 0.12 * sin(time * (0.35 + phase * 0.4) + phase * 19.0);
+                vec4 viewPosition = modelViewMatrix * vec4(position, 1.0);
+                gl_Position = projectionMatrix * viewPosition;
+                gl_PointSize = pointSize * pixelRatio * (0.94 + vPulse * 0.06);
+            }
+        `,
+        fragmentShader: `
+            uniform sampler2D map;
+            uniform float opacity;
+            varying vec3 vColor;
+            varying float vPulse;
+            void main() {
+                vec4 sprite = texture2D(map, gl_PointCoord);
+                if (sprite.a < 0.05) discard;
+                gl_FragColor = vec4(vColor * vPulse, sprite.a * opacity * vPulse);
+            }
+        `,
+        transparent: true,
+        depthWrite: false,
+        blending: THREE.AdditiveBlending,
+        toneMapped: false,
+    });
+}
+
 const spaceStarCount = innerWidth < 700 ? 3000 : 5600;
 const spaceStarPositions = new Float32Array(spaceStarCount * 3);
 const spaceStarColors = new Float32Array(spaceStarCount * 3);
+const spaceStarPhases = new Float32Array(spaceStarCount);
+const spaceStarSizes = new Float32Array(spaceStarCount);
 for (let i = 0; i < spaceStarCount; i += 1) {
     const i3 = i * 3;
     spaceStarPositions[i3] = THREE.MathUtils.randFloatSpread(360);
@@ -227,26 +281,48 @@ for (let i = 0; i < spaceStarCount; i += 1) {
     spaceStarColors[i3] = warmth > 0.84 ? 1 : 0.68;
     spaceStarColors[i3 + 1] = warmth > 0.84 ? 0.75 : 0.79;
     spaceStarColors[i3 + 2] = warmth > 0.84 ? 0.58 : 1;
+    spaceStarPhases[i] = Math.random();
+    spaceStarSizes[i] = THREE.MathUtils.randFloat(0.8, 1.55);
 }
 
 const spaceStarGeometry = new THREE.BufferGeometry();
 spaceStarGeometry.setAttribute("position", new THREE.BufferAttribute(spaceStarPositions, 3));
 spaceStarGeometry.setAttribute("color", new THREE.BufferAttribute(spaceStarColors, 3));
-const spaceStars = new THREE.Points(
-    spaceStarGeometry,
-    new THREE.PointsMaterial({
-        size: 1.5,
-        sizeAttenuation: false,
-        map: starTexture,
-        alphaTest: 0.08,
-        transparent: true,
-        opacity: 0.88,
-        vertexColors: true,
-        depthWrite: false,
-        blending: THREE.AdditiveBlending,
-    }),
-);
+spaceStarGeometry.setAttribute("phase", new THREE.BufferAttribute(spaceStarPhases, 1));
+spaceStarGeometry.setAttribute("pointSize", new THREE.BufferAttribute(spaceStarSizes, 1));
+const spaceStarMaterial = makeStarMaterial(0.86);
+const spaceStars = new THREE.Points(spaceStarGeometry, spaceStarMaterial);
 scene.add(spaceStars);
+
+const farStarCount = innerWidth < 700 ? 1400 : 2600;
+const farStarPositions = new Float32Array(farStarCount * 3);
+const farStarColors = new Float32Array(farStarCount * 3);
+const farStarPhases = new Float32Array(farStarCount);
+const farStarSizes = new Float32Array(farStarCount);
+for (let i = 0; i < farStarCount; i += 1) {
+    const i3 = i * 3;
+    const radius = THREE.MathUtils.randFloat(700, 1050);
+    const theta = Math.random() * Math.PI * 2;
+    const cosine = THREE.MathUtils.randFloatSpread(2);
+    const sine = Math.sqrt(1 - cosine * cosine);
+    farStarPositions[i3] = radius * sine * Math.cos(theta);
+    farStarPositions[i3 + 1] = radius * cosine;
+    farStarPositions[i3 + 2] = radius * sine * Math.sin(theta);
+    const warmth = Math.random();
+    farStarColors[i3] = warmth > 0.9 ? 1 : 0.58;
+    farStarColors[i3 + 1] = warmth > 0.9 ? 0.77 : 0.68;
+    farStarColors[i3 + 2] = warmth > 0.9 ? 0.6 : 0.92;
+    farStarPhases[i] = Math.random();
+    farStarSizes[i] = THREE.MathUtils.randFloat(0.65, 1.1);
+}
+const farStarGeometry = new THREE.BufferGeometry();
+farStarGeometry.setAttribute("position", new THREE.BufferAttribute(farStarPositions, 3));
+farStarGeometry.setAttribute("color", new THREE.BufferAttribute(farStarColors, 3));
+farStarGeometry.setAttribute("phase", new THREE.BufferAttribute(farStarPhases, 1));
+farStarGeometry.setAttribute("pointSize", new THREE.BufferAttribute(farStarSizes, 1));
+const farStarMaterial = makeStarMaterial(0.56);
+const farStars = new THREE.Points(farStarGeometry, farStarMaterial);
+scene.add(farStars);
 
 const trailCount = 64;
 const trailPositions = new Float32Array(trailCount * 3);
@@ -455,6 +531,12 @@ function updateBlooms() {
 }
 
 function updateSpaceStars() {
+    spaceStarMaterial.uniforms.time.value = driftTime;
+    farStarMaterial.uniforms.time.value = driftTime + 17;
+    farStars.position.copy(player.position);
+    farStars.rotation.y = driftTime * 0.0012;
+    farStars.rotation.x = Math.sin(driftTime * 0.015) * 0.012;
+
     let changed = false;
     for (let i = 0; i < spaceStarCount; i += 1) {
         const i3 = i * 3;
@@ -480,13 +562,14 @@ function updatePlanets(delta) {
         planet.rotation.y += planet.userData.rotationSpeed * delta;
     }
     for (const moon of moons) {
-        const { parent, distance, speed, inclination, phase } = moon.userData;
+        const { parent, distance, speed, inclination, phase, rotationSpeed } = moon.userData;
         const angle = driftTime * speed + phase;
         moon.position.set(
             parent.position.x + Math.cos(angle) * distance,
             parent.position.y + Math.sin(angle) * distance * inclination,
             parent.position.z + Math.sin(angle) * distance,
         );
+        moon.rotation.y += rotationSpeed * delta;
     }
 }
 
@@ -548,6 +631,8 @@ function onResize() {
     camera.updateProjectionMatrix();
     renderer.setSize(innerWidth, innerHeight);
     renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+    spaceStarMaterial.uniforms.pixelRatio.value = renderer.getPixelRatio();
+    farStarMaterial.uniforms.pixelRatio.value = renderer.getPixelRatio();
 }
 
 window.addEventListener("resize", onResize);
