@@ -83,8 +83,8 @@ const distantNebula = new THREE.Mesh(
     new THREE.ShaderMaterial({
         uniforms: {
             map: { value: nebulaTexture },
-            tint: { value: new THREE.Color(0x8b7daf) },
-            opacity: { value: 0.42 },
+            tint: { value: new THREE.Color(0xc7b7ff) },
+            opacity: { value: 0.78 },
         },
         vertexShader: `
             varying vec2 vUv;
@@ -116,7 +116,7 @@ const distantNebula = new THREE.Mesh(
         fog: false,
     }),
 );
-distantNebula.position.set(-95, 45, -165);
+distantNebula.position.set(-55, 48, -160);
 scene.add(distantNebula);
 
 const planetGeometry = new THREE.SphereGeometry(1, 64, 32);
