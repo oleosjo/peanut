@@ -11,6 +11,14 @@ remain text-free.
 - Credit: NASA/Goddard Space Flight Center Scientific Visualization Studio
 - License: Public domain
 
+## Cosmic Cliffs nebula
+
+- File: `assets/cosmic-cliffs.png`
+- Source: [NASA Scientific Visualization Studio](https://svs.gsfc.nasa.gov/31285/)
+- Credit: NASA, ESA, CSA, STScI
+- Usage: NASA Webb material is copyright-free and may be freely used with
+  source credit.
+
 ## Jupiter
 
 - File: `assets/jupiter-map.jpg`
@@ -30,6 +38,20 @@ remain text-free.
 - File: `assets/mars-map.jpg`
 - Source: [NASA Mars image texture](https://science.nasa.gov/3d-resources/mars/)
 - Credit: NASA/JPL-Caltech/USGS
+- License: Public domain
+
+## Neptune
+
+- File: `assets/neptune-map.jpg`
+- Source: [NASA Neptune image texture](https://science.nasa.gov/3d-resources/neptune/)
+- Credit: Don Davis and JPL/Caltech
+- Usage: Free NASA 3D resource; the cloud texture is an artistic reconstruction.
+
+## Venus
+
+- File: `assets/venus-map.jpg`
+- Source: [NASA/JPL Magellan–Venera–Pioneer map](https://commons.wikimedia.org/wiki/File:Venus_map_NASA_JPL_Magellan-Venera-Pioneer.jpg)
+- Credit: NASA/JPL/Caltech
 - License: Public domain
 
 ## Star sprite

@@ -75,6 +75,24 @@ skyTexture.minFilter = THREE.LinearMipmapLinearFilter;
 scene.background = skyTexture;
 scene.backgroundIntensity = 0.82;
 
+const nebulaTexture = loadTexture("assets/cosmic-cliffs.png");
+nebulaTexture.repeat.set(1, 0.66);
+nebulaTexture.offset.set(0, 0.15);
+const distantNebula = new THREE.Sprite(
+    new THREE.SpriteMaterial({
+        map: nebulaTexture,
+        color: 0x8b7daf,
+        transparent: true,
+        opacity: 0.3,
+        depthWrite: false,
+        blending: THREE.AdditiveBlending,
+        fog: false,
+    }),
+);
+distantNebula.position.set(-95, 45, -165);
+distantNebula.scale.set(95, 35, 1);
+scene.add(distantNebula);
+
 const planetGeometry = new THREE.SphereGeometry(1, 64, 32);
 const planets = [];
 const moons = [];
@@ -116,19 +134,39 @@ const mars = makePlanet(
     0.16,
     0.014,
 );
-
-const atmosphere = new THREE.Mesh(
-    planetGeometry,
-    new THREE.MeshBasicMaterial({
-        color: 0x6fa9ff,
-        transparent: true,
-        opacity: 0.1,
-        side: THREE.BackSide,
-        blending: THREE.AdditiveBlending,
-    }),
+const neptune = makePlanet(
+    "assets/neptune-map.jpg",
+    new THREE.Vector3(85, 32, -135),
+    6.5,
+    -0.45,
+    0.009,
 );
-atmosphere.scale.setScalar(1.035);
-earth.add(atmosphere);
+const venus = makePlanet(
+    "assets/venus-map.jpg",
+    new THREE.Vector3(-100, -42, 105),
+    5.5,
+    0.08,
+    -0.007,
+);
+
+function addAtmosphere(planet, color, opacity, scale = 1.035) {
+    const atmosphere = new THREE.Mesh(
+        planetGeometry,
+        new THREE.MeshBasicMaterial({
+            color,
+            transparent: true,
+            opacity,
+            side: THREE.BackSide,
+            blending: THREE.AdditiveBlending,
+        }),
+    );
+    atmosphere.scale.setScalar(scale);
+    planet.add(atmosphere);
+}
+
+addAtmosphere(earth, 0x6fa9ff, 0.1);
+addAtmosphere(neptune, 0x4f75ff, 0.08, 1.045);
+addAtmosphere(venus, 0xffa64d, 0.07, 1.025);
 
 function addMoon(parent, radius, distance, speed, color, inclination, phase) {
     const moon = new THREE.Mesh(
@@ -144,6 +182,7 @@ addMoon(earth, 0.55, 5.1, 0.09, 0xb8b5ad, 0.35, 0.4);
 addMoon(jupiter, 0.42, 7.2, 0.055, 0xd9c7a0, 0.18, 0);
 addMoon(jupiter, 0.34, 8.6, 0.042, 0xb5a990, -0.24, 2);
 addMoon(jupiter, 0.5, 10.2, 0.03, 0xc2b7a5, 0.3, 4);
+addMoon(neptune, 0.7, 9.4, 0.025, 0xb6a894, -0.35, 1.2);
 
 const starTexture = loadTexture("assets/star-disc.png");
 const glowTexture = loadTexture("assets/star-glow.png");
@@ -295,8 +334,11 @@ modelLoader.load("peanut.glb", ({ scene: model }) => {
 });
 
 const keys = new Set();
-const velocity = new THREE.Vector2();
-const desiredVelocity = new THREE.Vector2();
+const velocity = new THREE.Vector3();
+const desiredVelocity = new THREE.Vector3();
+const flightForward = new THREE.Vector3();
+const flightRight = new THREE.Vector3();
+const flightUp = new THREE.Vector3();
 const clock = new THREE.Clock();
 const lastPlayerPosition = player.position.clone();
 const playerDelta = new THREE.Vector3();
@@ -309,25 +351,33 @@ let previousPointerX = 0;
 let previousPointerY = 0;
 
 function updatePlayer(delta) {
-    const horizontal = Number(keys.has("ArrowRight") || keys.has("KeyD"))
+    const strafe = Number(keys.has("ArrowRight") || keys.has("KeyD"))
         - Number(keys.has("ArrowLeft") || keys.has("KeyA"));
-    const vertical = Number(keys.has("ArrowUp") || keys.has("KeyW"))
+    const forward = Number(keys.has("ArrowUp") || keys.has("KeyW"))
         - Number(keys.has("ArrowDown") || keys.has("KeyS"));
+    const vertical = Number(keys.has("KeyE")) - Number(keys.has("KeyQ"));
 
-    desiredVelocity.set(horizontal * 1, vertical * 0.82);
+    camera.updateMatrixWorld();
+    camera.getWorldDirection(flightForward).normalize();
+    flightRight.setFromMatrixColumn(camera.matrixWorld, 0).normalize();
+    flightUp.setFromMatrixColumn(camera.matrixWorld, 1).normalize();
+
+    desiredVelocity.copy(flightForward).multiplyScalar(0.12 + forward * 1.35);
+    desiredVelocity.addScaledVector(flightRight, strafe * 1.05);
+    desiredVelocity.addScaledVector(flightUp, vertical * 0.9);
+
     velocity.x = THREE.MathUtils.damp(velocity.x, desiredVelocity.x, 1.4, delta);
     velocity.y = THREE.MathUtils.damp(velocity.y, desiredVelocity.y, 1.4, delta);
+    velocity.z = THREE.MathUtils.damp(velocity.z, desiredVelocity.z, 1.4, delta);
+    player.position.addScaledVector(velocity, delta);
 
-    player.position.x += velocity.x * delta;
-    player.position.y += velocity.y * delta;
-
-    const horizontalLimit = innerWidth < 700 ? 2.7 : 4.8;
-    const verticalLimit = innerWidth < 700 ? 3.5 : 2.9;
-    player.position.x = THREE.MathUtils.clamp(player.position.x, -horizontalLimit, horizontalLimit);
-    player.position.y = THREE.MathUtils.clamp(player.position.y, -verticalLimit, verticalLimit);
-
-    player.rotation.z = THREE.MathUtils.damp(player.rotation.z, -velocity.x * 0.32, 1.2, delta);
-    player.rotation.x = THREE.MathUtils.damp(player.rotation.x, velocity.y * 0.16, 1.2, delta);
+    player.rotation.z = THREE.MathUtils.damp(player.rotation.z, -strafe * 0.28, 1.2, delta);
+    player.rotation.x = THREE.MathUtils.damp(
+        player.rotation.x,
+        forward * 0.08 + vertical * 0.16,
+        1.2,
+        delta,
+    );
 
     if (!peanutDragging) {
         peanutPivot.rotation.x += peanutSpinVelocity.x * delta;
@@ -355,13 +405,17 @@ function updateTrail(delta) {
 function updateBlooms() {
     for (const bloom of blooms) {
         const { origin, halo, core, light, phase } = bloom.userData;
+        if (origin.distanceTo(player.position) > 18) {
+            origin.set(
+                THREE.MathUtils.randFloatSpread(2),
+                THREE.MathUtils.randFloatSpread(2),
+                THREE.MathUtils.randFloatSpread(2),
+            ).normalize().multiplyScalar(THREE.MathUtils.randFloat(6, 11)).add(player.position);
+        }
         bloom.position.x = origin.x + Math.sin(driftTime * 0.22 + phase) * 0.16;
         bloom.position.y = origin.y + Math.cos(driftTime * 0.18 + phase) * 0.12;
-        bloom.position.z = player.position.z + origin.z;
-        const distance = Math.hypot(
-            bloom.position.x - player.position.x,
-            bloom.position.y - player.position.y,
-        );
+        bloom.position.z = origin.z + Math.sin(driftTime * 0.16 + phase) * 0.1;
+        const distance = bloom.position.distanceTo(player.position);
         const proximity = THREE.MathUtils.clamp(1 - distance / 2.2, 0, 1);
         const pulse = 0.5 + Math.sin(driftTime * 1.25 + phase) * 0.5;
         halo.material.opacity = 0.12 + pulse * 0.08 + proximity * 0.3;
@@ -375,10 +429,17 @@ function updateSpaceStars() {
     let changed = false;
     for (let i = 0; i < spaceStarCount; i += 1) {
         const i3 = i * 3;
-        if (spaceStarPositions[i3 + 2] > player.position.z + 180) {
-            spaceStarPositions[i3] = player.position.x + THREE.MathUtils.randFloatSpread(360);
-            spaceStarPositions[i3 + 1] = player.position.y + THREE.MathUtils.randFloatSpread(260);
-            spaceStarPositions[i3 + 2] = player.position.z - THREE.MathUtils.randFloat(190, 230);
+        const dx = spaceStarPositions[i3] - player.position.x;
+        const dy = spaceStarPositions[i3 + 1] - player.position.y;
+        const dz = spaceStarPositions[i3 + 2] - player.position.z;
+        if (dx * dx + dy * dy + dz * dz > 240 * 240) {
+            const radius = THREE.MathUtils.randFloat(170, 225);
+            const theta = Math.random() * Math.PI * 2;
+            const cosine = THREE.MathUtils.randFloatSpread(2);
+            const sine = Math.sqrt(1 - cosine * cosine);
+            spaceStarPositions[i3] = player.position.x + radius * sine * Math.cos(theta);
+            spaceStarPositions[i3 + 1] = player.position.y + radius * cosine;
+            spaceStarPositions[i3 + 2] = player.position.z + radius * sine * Math.sin(theta);
             changed = true;
         }
     }
@@ -401,11 +462,14 @@ function updatePlanets(delta) {
 }
 
 function resetComet(comet) {
-    comet.position.set(
-        THREE.MathUtils.randFloat(-16, 5),
-        THREE.MathUtils.randFloat(3, 8),
-        player.position.z - THREE.MathUtils.randFloat(25, 45),
-    );
+    camera.updateMatrixWorld();
+    camera.getWorldDirection(flightForward).normalize();
+    flightRight.setFromMatrixColumn(camera.matrixWorld, 0).normalize();
+    flightUp.setFromMatrixColumn(camera.matrixWorld, 1).normalize();
+    comet.position.copy(player.position)
+        .addScaledVector(flightForward, THREE.MathUtils.randFloat(25, 45))
+        .addScaledVector(flightRight, THREE.MathUtils.randFloatSpread(20))
+        .addScaledVector(flightUp, THREE.MathUtils.randFloat(3, 10));
     comet.userData.age = 0;
     comet.userData.delay = THREE.MathUtils.randFloat(9, 20);
 }
@@ -430,7 +494,7 @@ function animate() {
     driftTime += delta;
 
     updatePlayer(delta);
-    player.position.z = -driftTime * 0.32 + Math.sin(driftTime * 0.28) * 0.08;
+    peanutPivot.position.y = Math.sin(driftTime * 0.28) * 0.04;
     player.rotation.y = Math.sin(driftTime * 0.18) * 0.05;
 
     updateTrail(delta);
