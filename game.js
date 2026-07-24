@@ -101,12 +101,14 @@ const distantNebula = new THREE.Mesh(
             void main() {
                 vec3 image = texture2D(map, vUv).rgb;
                 float luminance = max(image.r, max(image.g, image.b));
-                float horizontal = smoothstep(0.0, 0.12, vUv.x)
-                    * smoothstep(0.0, 0.12, 1.0 - vUv.x);
-                float vertical = smoothstep(0.0, 0.16, vUv.y)
-                    * smoothstep(0.0, 0.16, 1.0 - vUv.y);
+                vec2 centered = vUv - vec2(0.5);
+                float vignette = 1.0 - smoothstep(
+                    0.3,
+                    0.52,
+                    length(vec2(centered.x * 0.9, centered.y * 2.2))
+                );
                 float alpha = smoothstep(0.025, 0.16, luminance)
-                    * horizontal * vertical * opacity;
+                    * vignette * opacity;
                 gl_FragColor = vec4(image * tint, alpha);
             }
         `,
