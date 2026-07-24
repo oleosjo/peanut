@@ -1,50 +1,30 @@
 <!doctype html>
 <html lang="en">
-    <head>
-        <meta charset="UTF-8" />
-        <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-        <title>A single peanut.</title>
-        <link rel="icon" type="image/jpeg" href="peanut.jpg" />
-
-        <!-- Start downloading the model immediately, in parallel with the viewer script -->
-        <link rel="preload" href="peanut.glb" as="fetch" crossorigin="anonymous" />
-
-        <script
-            type="module"
-            src="https://cdn.jsdelivr.net/npm/@google/model-viewer@4.3.1/dist/model-viewer.min.js"
-        ></script>
-
-        <style>
-            /* This ensures the model takes up the full screen */
-            body {
-                margin: 0;
-                height: 100vh;
-                background-color: #fff;
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <meta name="theme-color" content="#03030a" />
+    <meta name="description" content="A peanut drifting quietly through deep space." />
+    <title>A peanut in space.</title>
+    <link rel="icon" type="image/jpeg" href="peanut.jpg" />
+    <link rel="preload" href="peanut.glb" as="fetch" crossorigin="anonymous" />
+    <link rel="preload" href="assets/star-map-360.jpg" as="image" />
+    <link rel="preload" href="assets/cosmic-cliffs.png" as="image" />
+    <link rel="stylesheet" href="game.css" />
+    <script type="importmap">
+        {
+            "imports": {
+                "three": "https://cdn.jsdelivr.net/npm/three@0.180.0/build/three.module.js",
+                "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.180.0/examples/jsm/"
             }
-            model-viewer {
-                width: 100%;
-                height: 100%;
-                --poster-color: transparent;
-            }
-        </style>
-    </head>
-    <body>
-        <div class="grid-background">
-            <div class="grid-floor"></div>
-            <div class="horizon-glow"></div>
-        </div>
-        <model-viewer
-            src="peanut.glb"
-            alt="A single peanut."
-            auto-rotate
-            interaction-prompt="none"
-            camera-controls
-            shadow-intensity="1"
-            touch-action="pan-y"
-            camera-orbit="70deg auto 450%"
-            min-camera-orbit="auto auto 150%"
-            max-camera-orbit="auto auto 500%"
-        >
-        </model-viewer>
-    </body>
+        }
+    </script>
+</head>
+<body>
+    <main id="game" aria-label="An interactive peanut drifting through space">
+        <canvas id="space" aria-hidden="true"></canvas>
+    </main>
+
+    <script type="module" src="game.js"></script>
+</body>
 </html>
