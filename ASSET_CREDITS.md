@@ -68,6 +68,20 @@ remain text-free.
 - Credit: USGS/Tammy Becker and JPL/Caltech
 - Usage: Free NASA 3D resource
 
+## Sun
+
+- File: `assets/sun-map.jpg`
+- Source: [NASA SVS STEREO+SDO Sun 360](https://svs.gsfc.nasa.gov/3851/)
+- Credit: NASA/Goddard Space Flight Center Scientific Visualization Studio
+- License: Public domain
+
+## Asteroid Bennu
+
+- File: `assets/bennu-map.jpg`
+- Source: [NASA SVS Asteroid Bennu 3D Models](https://svs.gsfc.nasa.gov/5069/)
+- Credit: NASA/OSIRIS-REx/University of Arizona
+- License: Public domain
+
 ## Star sprite
 
 - Files: `assets/star-disc.png`, `assets/star-glow.png`

@@ -7,7 +7,7 @@ const canvas = document.querySelector("#space");
 const scene = new THREE.Scene();
 scene.fog = new THREE.FogExp2(0x080713, 0.00018);
 
-const camera = new THREE.PerspectiveCamera(52, innerWidth / innerHeight, 0.1, 8000);
+const camera = new THREE.PerspectiveCamera(52, innerWidth / innerHeight, 0.5, 120000);
 camera.position.set(0, 0.25, 8);
 
 const renderer = new THREE.WebGLRenderer({
@@ -177,6 +177,22 @@ const venus = makePlanet(
     -0.007,
 );
 
+const sunPosition = new THREE.Vector3(45000, 25000, -80000);
+const sun = new THREE.Mesh(
+    planetGeometry,
+    new THREE.MeshBasicMaterial({
+        map: loadTexture("assets/sun-map.jpg"),
+        color: 0xffd0a0,
+        fog: false,
+        toneMapped: false,
+    }),
+);
+sun.position.copy(sunPosition);
+sun.scale.setScalar(2500);
+scene.add(sun);
+keyLight.position.copy(sunPosition).normalize().multiplyScalar(1000);
+keyLight.target = player;
+
 function addAtmosphere(planet, color, opacity, scale = 1.035) {
     const atmosphere = new THREE.Mesh(
         planetGeometry,
@@ -224,6 +240,21 @@ addMoon(neptune, 12, 450, 0.025, tritonTexture, 0xd0c9bb, -0.35, 1.2);
 
 const starTexture = loadTexture("assets/star-disc.png");
 const glowTexture = loadTexture("assets/star-glow.png");
+
+const sunGlow = new THREE.Sprite(
+    new THREE.SpriteMaterial({
+        map: glowTexture,
+        color: 0xff8a36,
+        transparent: true,
+        opacity: 0.3,
+        depthWrite: false,
+        blending: THREE.AdditiveBlending,
+        fog: false,
+    }),
+);
+sunGlow.position.copy(sunPosition);
+sunGlow.scale.set(7200, 7200, 1);
+scene.add(sunGlow);
 
 function makeStarMaterial(opacity) {
     return new THREE.ShaderMaterial({
@@ -323,6 +354,120 @@ farStarGeometry.setAttribute("pointSize", new THREE.BufferAttribute(farStarSizes
 const farStarMaterial = makeStarMaterial(0.56);
 const farStars = new THREE.Points(farStarGeometry, farStarMaterial);
 scene.add(farStars);
+
+const dustCount = innerWidth < 700 ? 260 : 480;
+const dustPositions = new Float32Array(dustCount * 3);
+const dustColors = new Float32Array(dustCount * 3);
+
+function placeDust(index) {
+    const i3 = index * 3;
+    const radius = THREE.MathUtils.randFloat(4, 48);
+    const theta = Math.random() * Math.PI * 2;
+    const cosine = THREE.MathUtils.randFloatSpread(2);
+    const sine = Math.sqrt(1 - cosine * cosine);
+    dustPositions[i3] = player.position.x + radius * sine * Math.cos(theta);
+    dustPositions[i3 + 1] = player.position.y + radius * cosine;
+    dustPositions[i3 + 2] = player.position.z + radius * sine * Math.sin(theta);
+}
+
+for (let i = 0; i < dustCount; i += 1) {
+    const i3 = i * 3;
+    placeDust(i);
+    const warmth = Math.random();
+    dustColors[i3] = 0.65 + warmth * 0.35;
+    dustColors[i3 + 1] = 0.58 + warmth * 0.2;
+    dustColors[i3 + 2] = 0.5 + (1 - warmth) * 0.35;
+}
+
+const dustGeometry = new THREE.BufferGeometry();
+dustGeometry.setAttribute("position", new THREE.BufferAttribute(dustPositions, 3));
+dustGeometry.setAttribute("color", new THREE.BufferAttribute(dustColors, 3));
+const dust = new THREE.Points(
+    dustGeometry,
+    new THREE.PointsMaterial({
+        size: 0.72,
+        sizeAttenuation: false,
+        map: starTexture,
+        transparent: true,
+        opacity: 0.3,
+        vertexColors: true,
+        depthWrite: false,
+        blending: THREE.AdditiveBlending,
+    }),
+);
+scene.add(dust);
+
+const asteroidCount = innerWidth < 700 ? 4 : 6;
+const asteroidGeometry = new THREE.IcosahedronGeometry(1, 3);
+const asteroidVertices = asteroidGeometry.attributes.position;
+for (let i = 0; i < asteroidVertices.count; i += 1) {
+    const x = asteroidVertices.getX(i);
+    const y = asteroidVertices.getY(i);
+    const z = asteroidVertices.getZ(i);
+    const deformation = 1
+        + Math.sin(x * 5.3 + y * 2.7) * 0.09
+        + Math.sin(y * 6.1 + z * 3.4) * 0.07
+        + Math.sin(z * 7.2 + x * 2.1) * 0.05;
+    asteroidVertices.setXYZ(i, x * deformation, y * deformation, z * deformation);
+}
+asteroidGeometry.computeVertexNormals();
+const asteroidMaterial = new THREE.MeshStandardMaterial({
+    map: loadTexture("assets/bennu-map.jpg"),
+    color: 0x8c8982,
+    roughness: 1,
+    metalness: 0,
+});
+const asteroidMesh = new THREE.InstancedMesh(
+    asteroidGeometry,
+    asteroidMaterial,
+    asteroidCount,
+);
+asteroidMesh.frustumCulled = false;
+scene.add(asteroidMesh);
+
+const asteroidDummy = new THREE.Object3D();
+const asteroidData = Array.from({ length: asteroidCount }, () => ({
+    position: new THREE.Vector3(),
+    rotation: new THREE.Euler(
+        Math.random() * Math.PI,
+        Math.random() * Math.PI,
+        Math.random() * Math.PI,
+    ),
+    spin: new THREE.Vector3(
+        THREE.MathUtils.randFloat(-0.08, 0.08),
+        THREE.MathUtils.randFloat(-0.08, 0.08),
+        THREE.MathUtils.randFloat(-0.08, 0.08),
+    ),
+    scale: new THREE.Vector3(),
+}));
+
+function placeAsteroid(asteroid) {
+    const radius = THREE.MathUtils.randFloat(45, 145);
+    const theta = Math.random() * Math.PI * 2;
+    const cosine = THREE.MathUtils.randFloatSpread(2);
+    const sine = Math.sqrt(1 - cosine * cosine);
+    asteroid.position.set(
+        player.position.x + radius * sine * Math.cos(theta),
+        player.position.y + radius * cosine,
+        player.position.z + radius * sine * Math.sin(theta),
+    );
+    const scale = THREE.MathUtils.randFloat(1.2, 4.2);
+    asteroid.scale.set(
+        scale * THREE.MathUtils.randFloat(0.75, 1.2),
+        scale * THREE.MathUtils.randFloat(0.75, 1.2),
+        scale * THREE.MathUtils.randFloat(0.75, 1.2),
+    );
+}
+
+asteroidData.forEach((asteroid, index) => {
+    placeAsteroid(asteroid);
+    asteroidDummy.position.copy(asteroid.position);
+    asteroidDummy.rotation.copy(asteroid.rotation);
+    asteroidDummy.scale.copy(asteroid.scale);
+    asteroidDummy.updateMatrix();
+    asteroidMesh.setMatrixAt(index, asteroidDummy.matrix);
+});
+asteroidMesh.instanceMatrix.needsUpdate = true;
 
 const trailCount = 64;
 const trailPositions = new Float32Array(trailCount * 3);
@@ -557,10 +702,41 @@ function updateSpaceStars() {
     if (changed) spaceStarGeometry.attributes.position.needsUpdate = true;
 }
 
+function updateDustAndAsteroids(delta) {
+    let dustChanged = false;
+    for (let i = 0; i < dustCount; i += 1) {
+        const i3 = i * 3;
+        const dx = dustPositions[i3] - player.position.x;
+        const dy = dustPositions[i3 + 1] - player.position.y;
+        const dz = dustPositions[i3 + 2] - player.position.z;
+        if (dx * dx + dy * dy + dz * dz > 52 * 52) {
+            placeDust(i);
+            dustChanged = true;
+        }
+    }
+    if (dustChanged) dustGeometry.attributes.position.needsUpdate = true;
+
+    asteroidData.forEach((asteroid, index) => {
+        if (asteroid.position.distanceToSquared(player.position) > 175 * 175) {
+            placeAsteroid(asteroid);
+        }
+        asteroid.rotation.x += asteroid.spin.x * delta;
+        asteroid.rotation.y += asteroid.spin.y * delta;
+        asteroid.rotation.z += asteroid.spin.z * delta;
+        asteroidDummy.position.copy(asteroid.position);
+        asteroidDummy.rotation.copy(asteroid.rotation);
+        asteroidDummy.scale.copy(asteroid.scale);
+        asteroidDummy.updateMatrix();
+        asteroidMesh.setMatrixAt(index, asteroidDummy.matrix);
+    });
+    asteroidMesh.instanceMatrix.needsUpdate = true;
+}
+
 function updatePlanets(delta) {
     for (const planet of planets) {
         planet.rotation.y += planet.userData.rotationSpeed * delta;
     }
+    sun.rotation.y += delta * 0.0025;
     for (const moon of moons) {
         const { parent, distance, speed, inclination, phase, rotationSpeed } = moon.userData;
         const angle = driftTime * speed + phase;
@@ -612,6 +788,7 @@ function animate() {
     updateTrail(delta);
     updateBlooms();
     updateSpaceStars();
+    updateDustAndAsteroids(delta);
     updatePlanets(delta);
     updateComets(delta);
 
