@@ -20,25 +20,26 @@ renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
 renderer.setSize(innerWidth, innerHeight);
 renderer.outputColorSpace = THREE.SRGBColorSpace;
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
-renderer.toneMappingExposure = 1.08;
+renderer.toneMappingExposure = 1.24;
 
-scene.add(new THREE.HemisphereLight(0xb7c5ff, 0x241116, 1.55));
+scene.add(new THREE.HemisphereLight(0xb7c5ff, 0x241116, 1.45));
 
-const keyLight = new THREE.DirectionalLight(0xffd2a1, 3.8);
-keyLight.position.set(18, 12, 15);
+const keyLight = new THREE.DirectionalLight(0xfff1df, 5.6);
 scene.add(keyLight);
 
-const fillLight = new THREE.DirectionalLight(0x8fa8ff, 2.1);
+const fillLight = new THREE.DirectionalLight(0x8fa8ff, 1.55);
 fillLight.position.set(-10, -4, 12);
 scene.add(fillLight);
-
-const blueLight = new THREE.PointLight(0x5f79ff, 16, 28);
-blueLight.position.set(5, -3, 4);
-scene.add(blueLight);
 
 const player = new THREE.Group();
 player.position.set(0, -0.1, 0);
 scene.add(player);
+
+const peanutLight = new THREE.PointLight(0xffd7ae, 22, 18, 2);
+peanutLight.position.set(-3, 2.5, 4);
+const blueLight = new THREE.PointLight(0x7790ff, 12, 16, 2);
+blueLight.position.set(3, -2, 3);
+player.add(peanutLight, blueLight);
 
 const peanutPivot = new THREE.Group();
 player.add(peanutPivot);
@@ -53,7 +54,7 @@ controls.minDistance = 4.5;
 controls.maxDistance = 18;
 controls.minPolarAngle = 0.05;
 controls.maxPolarAngle = Math.PI - 0.05;
-controls.zoomToCursor = true;
+controls.zoomToCursor = false;
 controls.mouseButtons.LEFT = -1;
 controls.mouseButtons.MIDDLE = THREE.MOUSE.DOLLY;
 controls.mouseButtons.RIGHT = THREE.MOUSE.ROTATE;
@@ -73,18 +74,16 @@ const skyTexture = loadTexture("assets/star-map-360.jpg");
 skyTexture.mapping = THREE.EquirectangularReflectionMapping;
 skyTexture.minFilter = THREE.LinearMipmapLinearFilter;
 scene.background = skyTexture;
-scene.backgroundIntensity = 0.82;
+scene.backgroundIntensity = 0.96;
 
 const nebulaTexture = loadTexture("assets/cosmic-cliffs.png");
-nebulaTexture.repeat.set(1, 0.66);
-nebulaTexture.offset.set(0, 0.15);
 const distantNebula = new THREE.Mesh(
-    new THREE.PlaneGeometry(1900, 700),
+    new THREE.SphereGeometry(110000, 64, 32),
     new THREE.ShaderMaterial({
         uniforms: {
             map: { value: nebulaTexture },
             tint: { value: new THREE.Color(0xc7b7ff) },
-            opacity: { value: 0.78 },
+            opacity: { value: 0.86 },
         },
         vertexShader: `
             varying vec2 vUv;
@@ -99,26 +98,31 @@ const distantNebula = new THREE.Mesh(
             uniform float opacity;
             varying vec2 vUv;
             void main() {
-                vec3 image = texture2D(map, vUv).rgb;
+                vec2 patchCenter = vec2(0.82, 0.41);
+                vec2 patchSize = vec2(0.13, 0.09);
+                vec2 imageUv = (vUv - patchCenter) / patchSize + vec2(0.5);
+                float inside = step(0.0, imageUv.x) * step(imageUv.x, 1.0)
+                    * step(0.0, imageUv.y) * step(imageUv.y, 1.0);
+                vec3 image = texture2D(map, clamp(imageUv, 0.0, 1.0)).rgb;
                 float luminance = max(image.r, max(image.g, image.b));
-                vec2 centered = vUv - vec2(0.5);
+                vec2 centered = imageUv - vec2(0.5);
                 float vignette = 1.0 - smoothstep(
                     0.3,
                     0.52,
                     length(vec2(centered.x * 0.9, centered.y * 2.2))
                 );
                 float alpha = smoothstep(0.025, 0.16, luminance)
-                    * vignette * opacity;
+                    * vignette * opacity * inside;
                 gl_FragColor = vec4(image * tint, alpha);
             }
         `,
         transparent: true,
         depthWrite: false,
         blending: THREE.AdditiveBlending,
+        side: THREE.BackSide,
         fog: false,
     }),
 );
-distantNebula.position.set(-1600, 1100, -3400);
 scene.add(distantNebula);
 
 const planetGeometry = new THREE.SphereGeometry(1, 64, 32);
@@ -177,20 +181,17 @@ const venus = makePlanet(
     -0.007,
 );
 
-const sunPosition = new THREE.Vector3(45000, 25000, -80000);
-const sun = new THREE.Mesh(
-    planetGeometry,
-    new THREE.MeshBasicMaterial({
-        map: loadTexture("assets/sun-map.jpg"),
-        color: 0xffd0a0,
-        fog: false,
-        toneMapped: false,
-    }),
-);
-sun.position.copy(sunPosition);
-sun.scale.setScalar(2500);
-scene.add(sun);
-keyLight.position.copy(sunPosition).normalize().multiplyScalar(1000);
+const sunDistance = 95000;
+const sunElevation = THREE.MathUtils.degToRad(30);
+const sunAzimuth = THREE.MathUtils.degToRad(-17);
+const sunPosition = new THREE.Vector3(
+    Math.sin(sunAzimuth) * Math.cos(sunElevation),
+    Math.sin(sunElevation),
+    -Math.cos(sunAzimuth) * Math.cos(sunElevation),
+).multiplyScalar(sunDistance);
+const solarAngularDiameter = THREE.MathUtils.degToRad(0.533);
+const sunRadius = Math.tan(solarAngularDiameter / 2) * sunDistance;
+keyLight.position.copy(sunPosition);
 keyLight.target = player;
 
 function addAtmosphere(planet, color, opacity, scale = 1.035) {
@@ -244,17 +245,34 @@ const glowTexture = loadTexture("assets/star-glow.png");
 const sunGlow = new THREE.Sprite(
     new THREE.SpriteMaterial({
         map: glowTexture,
-        color: 0xff8a36,
+        color: 0xfff0c7,
         transparent: true,
-        opacity: 0.3,
+        opacity: 0.95,
         depthWrite: false,
         blending: THREE.AdditiveBlending,
         fog: false,
+        toneMapped: false,
     }),
 );
 sunGlow.position.copy(sunPosition);
-sunGlow.scale.set(7200, 7200, 1);
+sunGlow.scale.set(sunRadius * 12, sunRadius * 12, 1);
 scene.add(sunGlow);
+
+const sunCorona = new THREE.Sprite(
+    new THREE.SpriteMaterial({
+        map: glowTexture,
+        color: 0xff8a36,
+        transparent: true,
+        opacity: 0.38,
+        depthWrite: false,
+        blending: THREE.AdditiveBlending,
+        fog: false,
+        toneMapped: false,
+    }),
+);
+sunCorona.position.copy(sunPosition);
+sunCorona.scale.set(sunRadius * 32, sunRadius * 32, 1);
+scene.add(sunCorona);
 
 function makeStarMaterial(opacity) {
     return new THREE.ShaderMaterial({
@@ -274,10 +292,10 @@ function makeStarMaterial(opacity) {
             varying float vPulse;
             void main() {
                 vColor = color;
-                vPulse = 0.88 + 0.12 * sin(time * (0.35 + phase * 0.4) + phase * 19.0);
+                vPulse = 0.985 + 0.015 * sin(time * (0.18 + phase * 0.15) + phase * 19.0);
                 vec4 viewPosition = modelViewMatrix * vec4(position, 1.0);
                 gl_Position = projectionMatrix * viewPosition;
-                gl_PointSize = pointSize * pixelRatio * (0.94 + vPulse * 0.06);
+                gl_PointSize = pointSize * pixelRatio * vPulse;
             }
         `,
         fragmentShader: `
@@ -298,7 +316,35 @@ function makeStarMaterial(opacity) {
     });
 }
 
-const spaceStarCount = innerWidth < 700 ? 3000 : 5600;
+function setStarColor(colors, index) {
+    const temperature = Math.random();
+    const brightness = THREE.MathUtils.randFloat(0.78, 1);
+    let red;
+    let green;
+    let blue;
+    if (temperature < 0.55) {
+        red = 0.9;
+        green = 0.93;
+        blue = 1;
+    } else if (temperature < 0.8) {
+        red = 1;
+        green = 0.94;
+        blue = 0.84;
+    } else if (temperature < 0.92) {
+        red = 1;
+        green = 0.76;
+        blue = 0.58;
+    } else {
+        red = 0.72;
+        green = 0.84;
+        blue = 1;
+    }
+    colors[index] = red * brightness;
+    colors[index + 1] = green * brightness;
+    colors[index + 2] = blue * brightness;
+}
+
+const spaceStarCount = innerWidth < 700 ? 4500 : 9000;
 const spaceStarPositions = new Float32Array(spaceStarCount * 3);
 const spaceStarColors = new Float32Array(spaceStarCount * 3);
 const spaceStarPhases = new Float32Array(spaceStarCount);
@@ -308,12 +354,11 @@ for (let i = 0; i < spaceStarCount; i += 1) {
     spaceStarPositions[i3] = THREE.MathUtils.randFloatSpread(360);
     spaceStarPositions[i3 + 1] = THREE.MathUtils.randFloatSpread(260);
     spaceStarPositions[i3 + 2] = THREE.MathUtils.randFloat(-220, 180);
-    const warmth = Math.random();
-    spaceStarColors[i3] = warmth > 0.84 ? 1 : 0.68;
-    spaceStarColors[i3 + 1] = warmth > 0.84 ? 0.75 : 0.79;
-    spaceStarColors[i3 + 2] = warmth > 0.84 ? 0.58 : 1;
+    setStarColor(spaceStarColors, i3);
     spaceStarPhases[i] = Math.random();
-    spaceStarSizes[i] = THREE.MathUtils.randFloat(0.8, 1.55);
+    spaceStarSizes[i] = Math.random() < 0.035
+        ? THREE.MathUtils.randFloat(1.35, 2)
+        : THREE.MathUtils.randFloat(0.45, 1.05);
 }
 
 const spaceStarGeometry = new THREE.BufferGeometry();
@@ -325,7 +370,7 @@ const spaceStarMaterial = makeStarMaterial(0.86);
 const spaceStars = new THREE.Points(spaceStarGeometry, spaceStarMaterial);
 scene.add(spaceStars);
 
-const farStarCount = innerWidth < 700 ? 1400 : 2600;
+const farStarCount = innerWidth < 700 ? 2200 : 4200;
 const farStarPositions = new Float32Array(farStarCount * 3);
 const farStarColors = new Float32Array(farStarCount * 3);
 const farStarPhases = new Float32Array(farStarCount);
@@ -339,12 +384,11 @@ for (let i = 0; i < farStarCount; i += 1) {
     farStarPositions[i3] = radius * sine * Math.cos(theta);
     farStarPositions[i3 + 1] = radius * cosine;
     farStarPositions[i3 + 2] = radius * sine * Math.sin(theta);
-    const warmth = Math.random();
-    farStarColors[i3] = warmth > 0.9 ? 1 : 0.58;
-    farStarColors[i3 + 1] = warmth > 0.9 ? 0.77 : 0.68;
-    farStarColors[i3 + 2] = warmth > 0.9 ? 0.6 : 0.92;
+    setStarColor(farStarColors, i3);
     farStarPhases[i] = Math.random();
-    farStarSizes[i] = THREE.MathUtils.randFloat(0.65, 1.1);
+    farStarSizes[i] = Math.random() < 0.025
+        ? THREE.MathUtils.randFloat(1, 1.5)
+        : THREE.MathUtils.randFloat(0.35, 0.82);
 }
 const farStarGeometry = new THREE.BufferGeometry();
 farStarGeometry.setAttribute("position", new THREE.BufferAttribute(farStarPositions, 3));
@@ -355,9 +399,10 @@ const farStarMaterial = makeStarMaterial(0.56);
 const farStars = new THREE.Points(farStarGeometry, farStarMaterial);
 scene.add(farStars);
 
-const dustCount = innerWidth < 700 ? 260 : 480;
+const dustCount = innerWidth < 700 ? 900 : 1600;
 const dustPositions = new Float32Array(dustCount * 3);
 const dustColors = new Float32Array(dustCount * 3);
+const dustSizes = new Float32Array(dustCount);
 
 function placeDust(index) {
     const i3 = index * 3;
@@ -377,27 +422,50 @@ for (let i = 0; i < dustCount; i += 1) {
     dustColors[i3] = 0.65 + warmth * 0.35;
     dustColors[i3 + 1] = 0.58 + warmth * 0.2;
     dustColors[i3 + 2] = 0.5 + (1 - warmth) * 0.35;
+    dustSizes[i] = THREE.MathUtils.randFloat(0.5, 1.35);
 }
 
 const dustGeometry = new THREE.BufferGeometry();
 dustGeometry.setAttribute("position", new THREE.BufferAttribute(dustPositions, 3));
 dustGeometry.setAttribute("color", new THREE.BufferAttribute(dustColors, 3));
-const dust = new THREE.Points(
-    dustGeometry,
-    new THREE.PointsMaterial({
-        size: 0.72,
-        sizeAttenuation: false,
-        map: starTexture,
-        transparent: true,
-        opacity: 0.3,
-        vertexColors: true,
-        depthWrite: false,
-        blending: THREE.AdditiveBlending,
-    }),
-);
+dustGeometry.setAttribute("pointSize", new THREE.BufferAttribute(dustSizes, 1));
+const dustMaterial = new THREE.ShaderMaterial({
+    uniforms: {
+        map: { value: starTexture },
+        pixelRatio: { value: renderer.getPixelRatio() },
+    },
+    vertexShader: `
+        attribute vec3 color;
+        attribute float pointSize;
+        uniform float pixelRatio;
+        varying vec3 vColor;
+        varying float vOpacity;
+        void main() {
+            vColor = color;
+            vOpacity = 0.2 + pointSize * 0.16;
+            gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+            gl_PointSize = pointSize * pixelRatio;
+        }
+    `,
+    fragmentShader: `
+        uniform sampler2D map;
+        varying vec3 vColor;
+        varying float vOpacity;
+        void main() {
+            float alpha = texture2D(map, gl_PointCoord).a * vOpacity;
+            if (alpha < 0.025) discard;
+            gl_FragColor = vec4(vColor, alpha);
+        }
+    `,
+    transparent: true,
+    depthWrite: false,
+    blending: THREE.AdditiveBlending,
+    toneMapped: false,
+});
+const dust = new THREE.Points(dustGeometry, dustMaterial);
 scene.add(dust);
 
-const asteroidCount = innerWidth < 700 ? 4 : 6;
+const asteroidCount = innerWidth < 700 ? 8 : 14;
 const asteroidGeometry = new THREE.IcosahedronGeometry(1, 3);
 const asteroidVertices = asteroidGeometry.attributes.position;
 for (let i = 0; i < asteroidVertices.count; i += 1) {
@@ -411,9 +479,14 @@ for (let i = 0; i < asteroidVertices.count; i += 1) {
     asteroidVertices.setXYZ(i, x * deformation, y * deformation, z * deformation);
 }
 asteroidGeometry.computeVertexNormals();
+const asteroidTexture = loadTexture("assets/bennu-map.jpg");
+asteroidTexture.repeat.set(1, 0.58);
+asteroidTexture.offset.set(0, 0.21);
 const asteroidMaterial = new THREE.MeshStandardMaterial({
-    map: loadTexture("assets/bennu-map.jpg"),
-    color: 0x8c8982,
+    map: asteroidTexture,
+    color: 0x9b958a,
+    emissive: 0x17130f,
+    emissiveIntensity: 0.4,
     roughness: 1,
     metalness: 0,
 });
@@ -442,7 +515,7 @@ const asteroidData = Array.from({ length: asteroidCount }, () => ({
 }));
 
 function placeAsteroid(asteroid) {
-    const radius = THREE.MathUtils.randFloat(45, 145);
+    const radius = THREE.MathUtils.randFloat(35, 125);
     const theta = Math.random() * Math.PI * 2;
     const cosine = THREE.MathUtils.randFloatSpread(2);
     const sine = Math.sqrt(1 - cosine * cosine);
@@ -451,7 +524,7 @@ function placeAsteroid(asteroid) {
         player.position.y + radius * cosine,
         player.position.z + radius * sine * Math.sin(theta),
     );
-    const scale = THREE.MathUtils.randFloat(1.2, 4.2);
+    const scale = THREE.MathUtils.randFloat(1.4, 5.2);
     asteroid.scale.set(
         scale * THREE.MathUtils.randFloat(0.75, 1.2),
         scale * THREE.MathUtils.randFloat(0.75, 1.2),
@@ -500,44 +573,6 @@ const trail = new THREE.Points(
     }),
 );
 scene.add(trail);
-
-const bloomColors = [0xffb56f, 0x8fb8ff, 0xd6a0ff, 0x81ffe1];
-const bloomOrigins = [
-    new THREE.Vector3(-3.45, 1.85, -1.8),
-    new THREE.Vector3(3.5, 1.7, -2.2),
-    new THREE.Vector3(-2.9, -2.05, -2),
-    new THREE.Vector3(3.3, -1.9, -1.7),
-];
-const blooms = bloomOrigins.map((origin, index) => {
-    const group = new THREE.Group();
-    const haloMaterial = new THREE.SpriteMaterial({
-        map: glowTexture,
-        color: bloomColors[index],
-        transparent: true,
-        opacity: 0.18,
-        depthWrite: false,
-        blending: THREE.AdditiveBlending,
-    });
-    const halo = new THREE.Sprite(haloMaterial);
-    halo.scale.setScalar(0.8);
-    const core = new THREE.Sprite(
-        new THREE.SpriteMaterial({
-            map: starTexture,
-            color: bloomColors[index],
-            transparent: true,
-            opacity: 0.72,
-            depthWrite: false,
-            blending: THREE.AdditiveBlending,
-        }),
-    );
-    core.scale.setScalar(0.1);
-    const light = new THREE.PointLight(bloomColors[index], 3, 7, 2);
-    group.add(halo, core, light);
-    group.position.copy(origin);
-    group.userData = { origin, halo, core, light, phase: index * 1.7 };
-    scene.add(group);
-    return group;
-});
 
 function makeComet(delay) {
     const geometry = new THREE.BufferGeometry();
@@ -612,9 +647,9 @@ function updatePlayer(delta) {
     flightRight.setFromMatrixColumn(camera.matrixWorld, 0).normalize();
     flightUp.setFromMatrixColumn(camera.matrixWorld, 1).normalize();
 
-    desiredVelocity.copy(flightForward).multiplyScalar(0.12 + forward * 1.35);
-    desiredVelocity.addScaledVector(flightRight, strafe * 1.05);
-    desiredVelocity.addScaledVector(flightUp, vertical * 0.9);
+    desiredVelocity.copy(flightForward).multiplyScalar(forward * 24);
+    desiredVelocity.addScaledVector(flightRight, strafe * 18.5);
+    desiredVelocity.addScaledVector(flightUp, vertical * 16);
 
     velocity.x = THREE.MathUtils.damp(velocity.x, desiredVelocity.x, 1.4, delta);
     velocity.y = THREE.MathUtils.damp(velocity.y, desiredVelocity.y, 1.4, delta);
@@ -650,29 +685,6 @@ function updateTrail(delta) {
     trailPositions[1] = player.position.y;
     trailPositions[2] = player.position.z + 0.1;
     trailGeometry.attributes.position.needsUpdate = true;
-}
-
-function updateBlooms() {
-    for (const bloom of blooms) {
-        const { origin, halo, core, light, phase } = bloom.userData;
-        if (origin.distanceTo(player.position) > 18) {
-            origin.set(
-                THREE.MathUtils.randFloatSpread(2),
-                THREE.MathUtils.randFloatSpread(2),
-                THREE.MathUtils.randFloatSpread(2),
-            ).normalize().multiplyScalar(THREE.MathUtils.randFloat(6, 11)).add(player.position);
-        }
-        bloom.position.x = origin.x + Math.sin(driftTime * 0.22 + phase) * 0.16;
-        bloom.position.y = origin.y + Math.cos(driftTime * 0.18 + phase) * 0.12;
-        bloom.position.z = origin.z + Math.sin(driftTime * 0.16 + phase) * 0.1;
-        const distance = bloom.position.distanceTo(player.position);
-        const proximity = THREE.MathUtils.clamp(1 - distance / 2.2, 0, 1);
-        const pulse = 0.5 + Math.sin(driftTime * 1.25 + phase) * 0.5;
-        halo.material.opacity = 0.12 + pulse * 0.08 + proximity * 0.3;
-        halo.scale.setScalar(0.62 + pulse * 0.16 + proximity * 0.38);
-        core.material.opacity = 0.58 + pulse * 0.22;
-        light.intensity = 2 + proximity * 22;
-    }
 }
 
 function updateSpaceStars() {
@@ -736,7 +748,6 @@ function updatePlanets(delta) {
     for (const planet of planets) {
         planet.rotation.y += planet.userData.rotationSpeed * delta;
     }
-    sun.rotation.y += delta * 0.0025;
     for (const moon of moons) {
         const { parent, distance, speed, inclination, phase, rotationSpeed } = moon.userData;
         const angle = driftTime * speed + phase;
@@ -786,7 +797,6 @@ function animate() {
     player.rotation.y = Math.sin(driftTime * 0.18) * 0.05;
 
     updateTrail(delta);
-    updateBlooms();
     updateSpaceStars();
     updateDustAndAsteroids(delta);
     updatePlanets(delta);
@@ -797,7 +807,6 @@ function animate() {
     controls.target.add(playerDelta);
     lastPlayerPosition.copy(player.position);
     controls.update();
-    distantNebula.quaternion.copy(camera.quaternion);
 
     renderer.render(scene, camera);
     requestAnimationFrame(animate);
@@ -810,6 +819,7 @@ function onResize() {
     renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
     spaceStarMaterial.uniforms.pixelRatio.value = renderer.getPixelRatio();
     farStarMaterial.uniforms.pixelRatio.value = renderer.getPixelRatio();
+    dustMaterial.uniforms.pixelRatio.value = renderer.getPixelRatio();
 }
 
 window.addEventListener("resize", onResize);
