@@ -8,7 +8,7 @@ const scene = new THREE.Scene();
 scene.fog = new THREE.FogExp2(0x080713, 0.00018);
 
 const camera = new THREE.PerspectiveCamera(52, innerWidth / innerHeight, 0.5, 120000);
-camera.position.set(0, 0.25, 8);
+camera.position.set(4, 0.45, 6.9);
 
 const renderer = new THREE.WebGLRenderer({
     canvas,
@@ -433,26 +433,42 @@ const dustMaterial = new THREE.ShaderMaterial({
     uniforms: {
         map: { value: starTexture },
         pixelRatio: { value: renderer.getPixelRatio() },
+        speed: { value: 0 },
     },
     vertexShader: `
         attribute vec3 color;
         attribute float pointSize;
         uniform float pixelRatio;
+        uniform float speed;
         varying vec3 vColor;
         varying float vOpacity;
+        varying float vSpeed;
+        varying vec2 vStreakDirection;
         void main() {
             vColor = color;
             vOpacity = 0.2 + pointSize * 0.16;
-            gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
-            gl_PointSize = pointSize * pixelRatio;
+            vSpeed = speed;
+            vec4 viewPosition = modelViewMatrix * vec4(position, 1.0);
+            vStreakDirection = normalize(viewPosition.xy + vec2(0.0001));
+            gl_Position = projectionMatrix * viewPosition;
+            gl_PointSize = pointSize * pixelRatio * (1.0 + speed * 7.0);
         }
     `,
     fragmentShader: `
         uniform sampler2D map;
         varying vec3 vColor;
         varying float vOpacity;
+        varying float vSpeed;
+        varying vec2 vStreakDirection;
         void main() {
-            float alpha = texture2D(map, gl_PointCoord).a * vOpacity;
+            vec2 centered = gl_PointCoord - vec2(0.5);
+            vec2 perpendicular = vec2(-vStreakDirection.y, vStreakDirection.x);
+            float along = dot(centered, vStreakDirection);
+            float across = dot(centered, perpendicular);
+            float streak = smoothstep(0.13, 0.0, abs(across))
+                * smoothstep(0.52, 0.18, abs(along));
+            float disc = texture2D(map, gl_PointCoord).a;
+            float alpha = mix(disc, streak, vSpeed) * vOpacity;
             if (alpha < 0.025) discard;
             gl_FragColor = vec4(vColor, alpha);
         }
@@ -466,7 +482,7 @@ const dust = new THREE.Points(dustGeometry, dustMaterial);
 scene.add(dust);
 
 const asteroidCount = innerWidth < 700 ? 8 : 14;
-const asteroidGeometry = new THREE.IcosahedronGeometry(1, 3);
+const asteroidGeometry = new THREE.IcosahedronGeometry(1, 4);
 const asteroidVertices = asteroidGeometry.attributes.position;
 for (let i = 0; i < asteroidVertices.count; i += 1) {
     const x = asteroidVertices.getX(i);
@@ -489,7 +505,31 @@ const asteroidMaterial = new THREE.MeshStandardMaterial({
     emissiveIntensity: 0.4,
     roughness: 1,
     metalness: 0,
+    transparent: true,
 });
+asteroidMaterial.onBeforeCompile = (shader) => {
+    shader.vertexShader = shader.vertexShader
+        .replace(
+            "#include <common>",
+            "#include <common>\nattribute float instanceFade;\nvarying float vInstanceFade;",
+        )
+        .replace(
+            "#include <begin_vertex>",
+            "#include <begin_vertex>\nvInstanceFade = instanceFade;",
+        );
+    shader.fragmentShader = shader.fragmentShader
+        .replace(
+            "#include <common>",
+            "#include <common>\nvarying float vInstanceFade;",
+        )
+        .replace(
+            "#include <opaque_fragment>",
+            "diffuseColor.a *= vInstanceFade;\n#include <opaque_fragment>",
+        );
+};
+const asteroidFades = new THREE.InstancedBufferAttribute(new Float32Array(asteroidCount), 1);
+asteroidFades.setUsage(THREE.DynamicDrawUsage);
+asteroidGeometry.setAttribute("instanceFade", asteroidFades);
 const asteroidMesh = new THREE.InstancedMesh(
     asteroidGeometry,
     asteroidMaterial,
@@ -499,6 +539,10 @@ asteroidMesh.frustumCulled = false;
 scene.add(asteroidMesh);
 
 const asteroidDummy = new THREE.Object3D();
+const asteroidSpawnForward = new THREE.Vector3();
+const asteroidSpawnRight = new THREE.Vector3();
+const asteroidSpawnUp = new THREE.Vector3();
+const asteroidOffset = new THREE.Vector3();
 const asteroidData = Array.from({ length: asteroidCount }, () => ({
     position: new THREE.Vector3(),
     rotation: new THREE.Euler(
@@ -512,24 +556,28 @@ const asteroidData = Array.from({ length: asteroidCount }, () => ({
         THREE.MathUtils.randFloat(-0.08, 0.08),
     ),
     scale: new THREE.Vector3(),
+    fade: 0,
+    retiring: false,
 }));
 
 function placeAsteroid(asteroid) {
-    const radius = THREE.MathUtils.randFloat(35, 125);
-    const theta = Math.random() * Math.PI * 2;
-    const cosine = THREE.MathUtils.randFloatSpread(2);
-    const sine = Math.sqrt(1 - cosine * cosine);
-    asteroid.position.set(
-        player.position.x + radius * sine * Math.cos(theta),
-        player.position.y + radius * cosine,
-        player.position.z + radius * sine * Math.sin(theta),
-    );
+    camera.updateMatrixWorld();
+    camera.getWorldDirection(asteroidSpawnForward).normalize();
+    asteroidSpawnRight.setFromMatrixColumn(camera.matrixWorld, 0).normalize();
+    asteroidSpawnUp.setFromMatrixColumn(camera.matrixWorld, 1).normalize();
+    const distance = THREE.MathUtils.randFloat(140, 420);
+    asteroid.position.copy(player.position)
+        .addScaledVector(asteroidSpawnForward, distance)
+        .addScaledVector(asteroidSpawnRight, THREE.MathUtils.randFloatSpread(distance * 0.8))
+        .addScaledVector(asteroidSpawnUp, THREE.MathUtils.randFloatSpread(distance * 0.45));
     const scale = THREE.MathUtils.randFloat(1.4, 5.2);
     asteroid.scale.set(
         scale * THREE.MathUtils.randFloat(0.75, 1.2),
         scale * THREE.MathUtils.randFloat(0.75, 1.2),
         scale * THREE.MathUtils.randFloat(0.75, 1.2),
     );
+    asteroid.fade = 0;
+    asteroid.retiring = false;
 }
 
 asteroidData.forEach((asteroid, index) => {
@@ -539,40 +587,128 @@ asteroidData.forEach((asteroid, index) => {
     asteroidDummy.scale.copy(asteroid.scale);
     asteroidDummy.updateMatrix();
     asteroidMesh.setMatrixAt(index, asteroidDummy.matrix);
+    asteroidFades.setX(index, 0);
 });
 asteroidMesh.instanceMatrix.needsUpdate = true;
+asteroidFades.needsUpdate = true;
 
-const trailCount = 64;
-const trailPositions = new Float32Array(trailCount * 3);
-const trailColors = new Float32Array(trailCount * 3);
-for (let i = 0; i < trailCount; i += 1) {
-    const i3 = i * 3;
-    trailPositions[i3] = 1000;
-    trailPositions[i3 + 1] = 1000;
-    trailPositions[i3 + 2] = 0;
-    const fade = (1 - i / trailCount) ** 2;
-    trailColors[i3] = fade;
-    trailColors[i3 + 1] = fade * 0.48;
-    trailColors[i3 + 2] = fade * 0.16;
+function makeParticleRegion(position, color, count, radius, style = "dust") {
+    const positions = new Float32Array(count * 3);
+    const colors = new Float32Array(count * 3);
+    const pointSizes = new Float32Array(count);
+    const phases = new Float32Array(count);
+    const tint = new THREE.Color(color);
+    for (let i = 0; i < count; i += 1) {
+        const i3 = i * 3;
+        const particleRadius = radius * Math.cbrt(Math.random());
+        const theta = Math.random() * Math.PI * 2;
+        const cosine = THREE.MathUtils.randFloatSpread(2);
+        const sine = Math.sqrt(1 - cosine * cosine);
+        positions[i3] = particleRadius * sine * Math.cos(theta);
+        positions[i3 + 1] = particleRadius * cosine * 0.55;
+        positions[i3 + 2] = particleRadius * sine * Math.sin(theta);
+        const brightness = THREE.MathUtils.randFloat(0.45, 1);
+        colors[i3] = tint.r * brightness;
+        colors[i3 + 1] = tint.g * brightness;
+        colors[i3 + 2] = tint.b * brightness;
+        pointSizes[i] = style === "ion"
+            ? (Math.random() < 0.08
+                ? THREE.MathUtils.randFloat(8, 12)
+                : THREE.MathUtils.randFloat(3, 6))
+            : 1;
+        phases[i] = Math.random() * Math.PI * 2;
+    }
+    const geometry = new THREE.BufferGeometry();
+    geometry.setAttribute("position", new THREE.BufferAttribute(positions, 3));
+    geometry.setAttribute("color", new THREE.BufferAttribute(colors, 3));
+    geometry.setAttribute("pointSize", new THREE.BufferAttribute(pointSizes, 1));
+    geometry.setAttribute("phase", new THREE.BufferAttribute(phases, 1));
+    const material = style === "ion"
+        ? new THREE.ShaderMaterial({
+            uniforms: {
+                time: { value: 0 },
+                opacity: { value: 0.42 },
+                pixelRatio: { value: renderer.getPixelRatio() },
+            },
+            vertexShader: `
+                attribute vec3 color;
+                attribute float pointSize;
+                attribute float phase;
+                uniform float pixelRatio;
+                varying vec3 vColor;
+                varying float vPhase;
+                void main() {
+                    vColor = color;
+                    vPhase = phase;
+                    vec4 viewPosition = modelViewMatrix * vec4(position, 1.0);
+                    gl_Position = projectionMatrix * viewPosition;
+                    gl_PointSize = clamp(
+                        pointSize * pixelRatio * (180.0 / max(1.0, -viewPosition.z)),
+                        2.0,
+                        24.0
+                    );
+                }
+            `,
+            fragmentShader: `
+                uniform float time;
+                uniform float opacity;
+                varying vec3 vColor;
+                varying float vPhase;
+                void main() {
+                    vec2 point = gl_PointCoord - vec2(0.5);
+                    float radius = length(point);
+                    float angle = atan(point.y, point.x);
+                    float edgeNoise = sin(angle * 7.0 + vPhase * 3.0)
+                        * 0.035 + sin(angle * 13.0 - vPhase) * 0.018;
+                    float shape = 1.0 - smoothstep(
+                        0.4 + edgeNoise,
+                        0.5 + edgeNoise,
+                        radius
+                    );
+                    float grainX = sin(point.x * 43.0 + vPhase * 5.0 + time * 0.18);
+                    float grainY = sin(point.y * 37.0 - vPhase * 2.0 - time * 0.14);
+                    float mottle = 0.55 + 0.45 * grainX * grainY;
+                    float core = 1.0 - smoothstep(0.04, 0.3, radius);
+                    float shimmer = 0.9 + 0.1 * sin(time * 0.8 + vPhase * 5.0);
+                    float alpha = shape * (0.52 + mottle * 0.48) * opacity * shimmer;
+                    if (alpha < 0.012) discard;
+                    gl_FragColor = vec4(vColor * (0.9 + core * 0.7 + mottle * 0.28), alpha);
+                }
+            `,
+            transparent: true,
+            blending: THREE.AdditiveBlending,
+            depthWrite: false,
+            toneMapped: false,
+        })
+        : new THREE.PointsMaterial({
+            map: starTexture,
+            size: 1.8,
+            sizeAttenuation: true,
+            transparent: true,
+            opacity: 0.28,
+            vertexColors: true,
+            blending: THREE.AdditiveBlending,
+            depthWrite: false,
+        });
+    const cloud = new THREE.Points(
+        geometry,
+        material,
+    );
+    cloud.position.copy(position);
+    scene.add(cloud);
+    return { cloud, position: position.clone(), radius, color: tint, style };
 }
 
-const trailGeometry = new THREE.BufferGeometry();
-trailGeometry.setAttribute("position", new THREE.BufferAttribute(trailPositions, 3));
-trailGeometry.setAttribute("color", new THREE.BufferAttribute(trailColors, 3));
-const trail = new THREE.Points(
-    trailGeometry,
-    new THREE.PointsMaterial({
-        size: 0.12,
-        sizeAttenuation: true,
-        map: starTexture,
-        transparent: true,
-        opacity: 0.7,
-        vertexColors: true,
-        depthWrite: false,
-        blending: THREE.AdditiveBlending,
-    }),
-);
-scene.add(trail);
+const environmentalRegions = [
+    makeParticleRegion(
+        new THREE.Vector3(-40, 100, -580),
+        0x78d4ff,
+        innerWidth < 700 ? 420 : 760,
+        115,
+        "ion",
+    ),
+    makeParticleRegion(new THREE.Vector3(-520, -110, 280), 0xffba62, innerWidth < 700 ? 450 : 800, 130),
+];
 
 function makeComet(delay) {
     const geometry = new THREE.BufferGeometry();
@@ -629,7 +765,8 @@ const lastPlayerPosition = player.position.clone();
 const playerDelta = new THREE.Vector3();
 const peanutSpinVelocity = new THREE.Vector2();
 let driftTime = 0;
-let trailAccumulator = 0;
+let flightSpeed = 0;
+let starRecycleAccumulator = 0;
 let peanutDragging = false;
 let peanutPointerId = null;
 let previousPointerX = 0;
@@ -655,6 +792,14 @@ function updatePlayer(delta) {
     velocity.y = THREE.MathUtils.damp(velocity.y, desiredVelocity.y, 1.4, delta);
     velocity.z = THREE.MathUtils.damp(velocity.z, desiredVelocity.z, 1.4, delta);
     player.position.addScaledVector(velocity, delta);
+    flightSpeed = THREE.MathUtils.clamp(velocity.length() / 24, 0, 1);
+    dustMaterial.uniforms.speed.value = flightSpeed;
+    const targetFov = 52 + flightSpeed * 7;
+    const nextFov = THREE.MathUtils.damp(camera.fov, targetFov, 4, delta);
+    if (Math.abs(nextFov - camera.fov) > 0.001) {
+        camera.fov = nextFov;
+        camera.updateProjectionMatrix();
+    }
 
     player.rotation.z = THREE.MathUtils.damp(player.rotation.z, -strafe * 0.28, 1.2, delta);
     player.rotation.x = THREE.MathUtils.damp(
@@ -672,27 +817,13 @@ function updatePlayer(delta) {
     }
 }
 
-function updateTrail(delta) {
-    if (velocity.lengthSq() < 0.002) return;
-    trailAccumulator += delta;
-    if (trailAccumulator < 0.035) return;
-    trailAccumulator = 0;
-
-    for (let i = trailPositions.length - 1; i >= 3; i -= 1) {
-        trailPositions[i] = trailPositions[i - 3];
-    }
-    trailPositions[0] = player.position.x;
-    trailPositions[1] = player.position.y;
-    trailPositions[2] = player.position.z + 0.1;
-    trailGeometry.attributes.position.needsUpdate = true;
-}
-
-function updateSpaceStars() {
+function updateSpaceStars(recycleStars) {
     spaceStarMaterial.uniforms.time.value = driftTime;
     farStarMaterial.uniforms.time.value = driftTime + 17;
     farStars.position.copy(player.position);
     farStars.rotation.y = driftTime * 0.0012;
     farStars.rotation.x = Math.sin(driftTime * 0.015) * 0.012;
+    if (!recycleStars) return;
 
     let changed = false;
     for (let i = 0; i < spaceStarCount; i += 1) {
@@ -728,13 +859,28 @@ function updateDustAndAsteroids(delta) {
     }
     if (dustChanged) dustGeometry.attributes.position.needsUpdate = true;
 
+    let asteroidFadeChanged = false;
     asteroidData.forEach((asteroid, index) => {
-        if (asteroid.position.distanceToSquared(player.position) > 175 * 175) {
-            placeAsteroid(asteroid);
+        asteroidOffset.copy(asteroid.position).sub(player.position);
+        if (!asteroid.retiring && (
+            asteroidOffset.lengthSq() > 520 * 520
+            || asteroidOffset.dot(flightForward) < -90
+        )) {
+            asteroid.retiring = true;
+        }
+        if (asteroid.retiring) {
+            asteroid.fade = Math.max(0, asteroid.fade - delta / 0.8);
+            asteroidFadeChanged = true;
+            if (asteroid.fade === 0) placeAsteroid(asteroid);
+        } else if (asteroid.fade < 1) {
+            asteroid.fade = Math.min(1, asteroid.fade + delta / 1.15);
+            asteroidFadeChanged = true;
         }
         asteroid.rotation.x += asteroid.spin.x * delta;
         asteroid.rotation.y += asteroid.spin.y * delta;
         asteroid.rotation.z += asteroid.spin.z * delta;
+        const easedFade = asteroid.fade * asteroid.fade * (3 - 2 * asteroid.fade);
+        asteroidFades.setX(index, easedFade);
         asteroidDummy.position.copy(asteroid.position);
         asteroidDummy.rotation.copy(asteroid.rotation);
         asteroidDummy.scale.copy(asteroid.scale);
@@ -742,6 +888,7 @@ function updateDustAndAsteroids(delta) {
         asteroidMesh.setMatrixAt(index, asteroidDummy.matrix);
     });
     asteroidMesh.instanceMatrix.needsUpdate = true;
+    if (asteroidFadeChanged) asteroidFades.needsUpdate = true;
 }
 
 function updatePlanets(delta) {
@@ -758,6 +905,42 @@ function updatePlanets(delta) {
         );
         moon.rotation.y += rotationSpeed * delta;
     }
+}
+
+const baseFogColor = new THREE.Color(0x080713);
+const environmentFogColor = new THREE.Color();
+
+function updateEnvironmentalRegions(delta) {
+    let strongestInfluence = 0;
+    let activeRegion = null;
+    for (const region of environmentalRegions) {
+        region.cloud.rotation.y += delta * 0.008;
+        if (region.style === "ion") {
+            region.cloud.material.uniforms.time.value = driftTime;
+        }
+        const distance = player.position.distanceTo(region.position);
+        const influence = THREE.MathUtils.clamp(1 - distance / region.radius, 0, 1);
+        if (region.style === "ion") {
+            region.cloud.material.uniforms.opacity.value = 0.38 + influence * 0.3;
+        } else {
+            region.cloud.material.opacity = 0.24 + influence * 0.28;
+        }
+        if (influence > strongestInfluence) {
+            strongestInfluence = influence;
+            activeRegion = region;
+        }
+    }
+    environmentFogColor.copy(baseFogColor);
+    if (activeRegion && activeRegion.style !== "ion") {
+        environmentFogColor.lerp(activeRegion.color, strongestInfluence * 0.24);
+    }
+    scene.fog.color.lerp(environmentFogColor, 1 - Math.exp(-delta * 1.6));
+    scene.fog.density = THREE.MathUtils.damp(
+        scene.fog.density,
+        0.00018 + strongestInfluence * 0.0012,
+        1.8,
+        delta,
+    );
 }
 
 function resetComet(comet) {
@@ -791,15 +974,18 @@ function updateComets(delta) {
 function animate() {
     const delta = Math.min(clock.getDelta(), 0.05);
     driftTime += delta;
+    starRecycleAccumulator += delta;
+    const recycleStars = starRecycleAccumulator >= 0.1;
+    if (recycleStars) starRecycleAccumulator = 0;
 
     updatePlayer(delta);
     peanutPivot.position.y = Math.sin(driftTime * 0.28) * 0.04;
     player.rotation.y = Math.sin(driftTime * 0.18) * 0.05;
 
-    updateTrail(delta);
-    updateSpaceStars();
+    updateSpaceStars(recycleStars);
     updateDustAndAsteroids(delta);
     updatePlanets(delta);
+    updateEnvironmentalRegions(delta);
     updateComets(delta);
 
     playerDelta.copy(player.position).sub(lastPlayerPosition);
@@ -820,6 +1006,11 @@ function onResize() {
     spaceStarMaterial.uniforms.pixelRatio.value = renderer.getPixelRatio();
     farStarMaterial.uniforms.pixelRatio.value = renderer.getPixelRatio();
     dustMaterial.uniforms.pixelRatio.value = renderer.getPixelRatio();
+    for (const region of environmentalRegions) {
+        if (region.style === "ion") {
+            region.cloud.material.uniforms.pixelRatio.value = renderer.getPixelRatio();
+        }
+    }
 }
 
 window.addEventListener("resize", onResize);
