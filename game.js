@@ -5,9 +5,9 @@ import { OrbitControls } from "three/addons/controls/OrbitControls.js";
 
 const canvas = document.querySelector("#space");
 const scene = new THREE.Scene();
-scene.fog = new THREE.FogExp2(0x080713, 0.0065);
+scene.fog = new THREE.FogExp2(0x080713, 0.00018);
 
-const camera = new THREE.PerspectiveCamera(52, innerWidth / innerHeight, 0.1, 250);
+const camera = new THREE.PerspectiveCamera(52, innerWidth / innerHeight, 0.1, 8000);
 camera.position.set(0, 0.25, 8);
 
 const renderer = new THREE.WebGLRenderer({
@@ -79,7 +79,7 @@ const nebulaTexture = loadTexture("assets/cosmic-cliffs.png");
 nebulaTexture.repeat.set(1, 0.66);
 nebulaTexture.offset.set(0, 0.15);
 const distantNebula = new THREE.Mesh(
-    new THREE.PlaneGeometry(95, 35),
+    new THREE.PlaneGeometry(1900, 700),
     new THREE.ShaderMaterial({
         uniforms: {
             map: { value: nebulaTexture },
@@ -118,7 +118,7 @@ const distantNebula = new THREE.Mesh(
         fog: false,
     }),
 );
-distantNebula.position.set(-55, 48, -160);
+distantNebula.position.set(-1600, 1100, -3400);
 scene.add(distantNebula);
 
 const planetGeometry = new THREE.SphereGeometry(1, 64, 32);
@@ -143,36 +143,36 @@ function makePlanet(path, position, radius, tilt, rotationSpeed) {
 
 const jupiter = makePlanet(
     "assets/jupiter-map.jpg",
-    new THREE.Vector3(-21, 8, -36),
-    5.2,
+    new THREE.Vector3(-1050, 400, -1800),
+    260,
     -0.05,
     0.012,
 );
 const earth = makePlanet(
     "assets/earth-map.jpg",
-    new THREE.Vector3(25, -7, -30),
-    3.2,
+    new THREE.Vector3(1350, -420, -1650),
+    160,
     -0.4,
     0.018,
 );
 const mars = makePlanet(
     "assets/mars-map.jpg",
-    new THREE.Vector3(-18, 9, 31),
-    3.5,
+    new THREE.Vector3(-950, 480, 1750),
+    120,
     0.16,
     0.014,
 );
 const neptune = makePlanet(
     "assets/neptune-map.jpg",
-    new THREE.Vector3(85, 32, -135),
-    6.5,
+    new THREE.Vector3(2200, 850, -3300),
+    260,
     -0.45,
     0.009,
 );
 const venus = makePlanet(
     "assets/venus-map.jpg",
-    new THREE.Vector3(-100, -42, 105),
-    5.5,
+    new THREE.Vector3(-2100, -900, 2600),
+    150,
     0.08,
     -0.007,
 );
@@ -206,11 +206,11 @@ function addMoon(parent, radius, distance, speed, color, inclination, phase) {
     moons.push(moon);
 }
 
-addMoon(earth, 0.55, 5.1, 0.09, 0xb8b5ad, 0.35, 0.4);
-addMoon(jupiter, 0.42, 7.2, 0.055, 0xd9c7a0, 0.18, 0);
-addMoon(jupiter, 0.34, 8.6, 0.042, 0xb5a990, -0.24, 2);
-addMoon(jupiter, 0.5, 10.2, 0.03, 0xc2b7a5, 0.3, 4);
-addMoon(neptune, 0.7, 9.4, 0.025, 0xb6a894, -0.35, 1.2);
+addMoon(earth, 40, 380, 0.09, 0xb8b5ad, 0.35, 0.4);
+addMoon(jupiter, 20, 380, 0.055, 0xd9c7a0, 0.18, 0);
+addMoon(jupiter, 18, 500, 0.042, 0xb5a990, -0.24, 2);
+addMoon(jupiter, 25, 650, 0.03, 0xc2b7a5, 0.3, 4);
+addMoon(neptune, 35, 450, 0.025, 0xb6a894, -0.35, 1.2);
 
 const starTexture = loadTexture("assets/star-disc.png");
 const glowTexture = loadTexture("assets/star-glow.png");
