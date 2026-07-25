@@ -4,22 +4,58 @@ import { DRACOLoader } from "three/addons/loaders/DRACOLoader.js";
 import { OrbitControls } from "three/addons/controls/OrbitControls.js";
 
 const canvas = document.querySelector("#space");
+const thrustButton = document.querySelector("#thrust");
+const touchInput = { forward: 0 };
 
 // iOS Chrome/Safari crash under GPU memory pressure from 8K sky + retina
 // framebuffers. Detect constrained devices and run a lighter quality path.
 const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent)
     || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
 const isCoarsePointer = matchMedia("(pointer: coarse)").matches;
-const isNarrowViewport = Math.min(innerWidth, innerHeight) < 700;
+const isNarrowViewport = Math.min(innerWidth, innerHeight) < 820;
 const isLowMemory = typeof navigator.deviceMemory === "number" && navigator.deviceMemory <= 4;
 const useMobileQuality = isIOS || isCoarsePointer || isNarrowViewport || isLowMemory;
-const useTouchControls = isIOS || isCoarsePointer || navigator.maxTouchPoints > 1;
+// Show thrust on phones/tablets and narrow layouts (including desktop device mode).
+const useTouchControls = useMobileQuality
+    || isIOS
+    || isCoarsePointer
+    || navigator.maxTouchPoints > 0;
+
+function bindThrustControls() {
+    if (!thrustButton) return;
+    // CSS already reveals the button on touch/narrow viewports; keep JS in sync.
+    thrustButton.style.display = useTouchControls ? "grid" : "none";
+    if (!useTouchControls || thrustButton.dataset.bound === "true") return;
+    thrustButton.dataset.bound = "true";
+
+    const setThrust = (active) => {
+        touchInput.forward = active ? 1 : 0;
+        thrustButton.classList.toggle("is-active", active);
+    };
+    thrustButton.addEventListener("pointerdown", (event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        thrustButton.setPointerCapture(event.pointerId);
+        setThrust(true);
+    });
+    const endThrust = (event) => {
+        if (thrustButton.hasPointerCapture(event.pointerId)) {
+            thrustButton.releasePointerCapture(event.pointerId);
+        }
+        setThrust(false);
+    };
+    thrustButton.addEventListener("pointerup", endThrust);
+    thrustButton.addEventListener("pointercancel", endThrust);
+    thrustButton.addEventListener("lostpointercapture", () => setThrust(false));
+    window.addEventListener("blur", () => setThrust(false));
+}
+
+bindThrustControls();
 
 const quality = useMobileQuality
     ? {
         antialias: false,
         maxPixelRatio: 1,
-        minPixelRatio: 1,
         anisotropy: 1,
         planetSegments: [24, 12],
         nebulaSegments: [20, 12],
@@ -43,7 +79,6 @@ const quality = useMobileQuality
     : {
         antialias: true,
         maxPixelRatio: 2,
-        minPixelRatio: 2,
         anisotropy: null,
         planetSegments: [64, 32],
         nebulaSegments: [64, 32],
@@ -915,7 +950,6 @@ modelLoader.load("peanut.glb", ({ scene: model }) => {
 });
 
 const keys = new Set();
-const touchInput = { forward: 0 };
 const velocity = new THREE.Vector3();
 const desiredVelocity = new THREE.Vector3();
 const flightForward = new THREE.Vector3();
@@ -932,30 +966,6 @@ let peanutDragging = false;
 let peanutPointerId = null;
 let previousPointerX = 0;
 let previousPointerY = 0;
-const thrustButton = document.querySelector("#thrust");
-if (useTouchControls && thrustButton) {
-    thrustButton.hidden = false;
-    const setThrust = (active) => {
-        touchInput.forward = active ? 1 : 0;
-        thrustButton.classList.toggle("is-active", active);
-    };
-    thrustButton.addEventListener("pointerdown", (event) => {
-        event.preventDefault();
-        event.stopPropagation();
-        thrustButton.setPointerCapture(event.pointerId);
-        setThrust(true);
-    });
-    const endThrust = (event) => {
-        if (thrustButton.hasPointerCapture?.(event.pointerId)) {
-            thrustButton.releasePointerCapture(event.pointerId);
-        }
-        setThrust(false);
-    };
-    thrustButton.addEventListener("pointerup", endThrust);
-    thrustButton.addEventListener("pointercancel", endThrust);
-    thrustButton.addEventListener("lostpointercapture", () => setThrust(false));
-    window.addEventListener("blur", () => setThrust(false));
-}
 
 function updatePlayer(delta) {
     const strafe = Number(keys.has("ArrowRight") || keys.has("KeyD"))
