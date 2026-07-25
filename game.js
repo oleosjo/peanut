@@ -1224,7 +1224,7 @@ function syncPixelRatioUniforms() {
         dustMaterial.uniforms.pixelRatio.value = ratio;
     }
     for (const region of environmentalRegions) {
-        if (region.style === "ion" && region.cloud.material.uniforms?.pixelRatio) {
+        if (region.cloud.material.uniforms?.pixelRatio) {
             region.cloud.material.uniforms.pixelRatio.value = ratio;
         }
     }
