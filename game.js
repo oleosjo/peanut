@@ -13,28 +13,37 @@ const isCoarsePointer = matchMedia("(pointer: coarse)").matches;
 const isNarrowViewport = Math.min(innerWidth, innerHeight) < 700;
 const isLowMemory = typeof navigator.deviceMemory === "number" && navigator.deviceMemory <= 4;
 const useMobileQuality = isIOS || isCoarsePointer || isNarrowViewport || isLowMemory;
+const useTouchControls = isIOS || isCoarsePointer || navigator.maxTouchPoints > 1;
 
 const quality = useMobileQuality
     ? {
         antialias: false,
-        maxPixelRatio: 1.25,
+        maxPixelRatio: 1,
+        minPixelRatio: 1,
         anisotropy: 1,
-        planetSegments: [32, 16],
-        nebulaSegments: [32, 16],
-        moonSegments: [16, 12],
-        asteroidDetail: 1,
-        spaceStars: 1800,
-        farStars: 900,
-        dust: 400,
-        asteroids: 5,
-        ionParticles: 180,
-        dustRegionParticles: 200,
+        planetSegments: [24, 12],
+        nebulaSegments: [20, 12],
+        moonSegments: [12, 8],
+        asteroidDetail: 0,
+        spaceStars: 900,
+        farStars: 320,
+        dust: 140,
+        asteroids: 3,
+        ionParticles: 70,
+        dustRegionParticles: 80,
         mobileAssets: true,
-        maxTextureSize: 2048,
+        maxTextureSize: 1536,
+        simpleStars: true,
+        enableComets: false,
+        enableAtmospheres: false,
+        dualPeanutLights: false,
+        starRecycleSeconds: 0.22,
+        toneMapping: THREE.NeutralToneMapping,
     }
     : {
         antialias: true,
         maxPixelRatio: 2,
+        minPixelRatio: 2,
         anisotropy: null,
         planetSegments: [64, 32],
         nebulaSegments: [64, 32],
@@ -48,6 +57,12 @@ const quality = useMobileQuality
         dustRegionParticles: 800,
         mobileAssets: false,
         maxTextureSize: 8192,
+        simpleStars: false,
+        enableComets: true,
+        enableAtmospheres: true,
+        dualPeanutLights: true,
+        starRecycleSeconds: 0.1,
+        toneMapping: THREE.ACESFilmicToneMapping,
     };
 
 function pixelRatioCap() {
@@ -65,14 +80,15 @@ const renderer = new THREE.WebGLRenderer({
     antialias: quality.antialias,
     alpha: false,
     powerPreference: useMobileQuality ? "default" : "high-performance",
+    precision: useMobileQuality ? "mediump" : "highp",
     stencil: false,
     depth: true,
 });
 renderer.setPixelRatio(pixelRatioCap());
 renderer.setSize(innerWidth, innerHeight, false);
 renderer.outputColorSpace = THREE.SRGBColorSpace;
-renderer.toneMapping = THREE.ACESFilmicToneMapping;
-renderer.toneMappingExposure = 1.24;
+renderer.toneMapping = quality.toneMapping;
+renderer.toneMappingExposure = useMobileQuality ? 1.12 : 1.24;
 
 // 8K sky exceeds common mobile MAX_TEXTURE_SIZE (4096); force downscaled assets.
 if (renderer.capabilities.maxTextureSize < 8192) {
@@ -93,11 +109,17 @@ const player = new THREE.Group();
 player.position.set(0, -0.1, 0);
 scene.add(player);
 
-const peanutLight = new THREE.PointLight(0xffd7ae, 22, 18, 2);
+const peanutLight = new THREE.PointLight(0xffd7ae, quality.dualPeanutLights ? 22 : 16, 18, 2);
 peanutLight.position.set(-3, 2.5, 4);
-const blueLight = new THREE.PointLight(0x7790ff, 12, 16, 2);
-blueLight.position.set(3, -2, 3);
-player.add(peanutLight, blueLight);
+player.add(peanutLight);
+if (quality.dualPeanutLights) {
+    const blueLight = new THREE.PointLight(0x7790ff, 12, 16, 2);
+    blueLight.position.set(3, -2, 3);
+    player.add(blueLight);
+} else {
+    // One cheaper fill instead of a second dynamic point light.
+    fillLight.intensity = 1.15;
+}
 
 const peanutPivot = new THREE.Group();
 player.add(peanutPivot);
@@ -106,7 +128,7 @@ const controls = new OrbitControls(camera, canvas);
 controls.target.copy(player.position);
 controls.enableDamping = true;
 controls.dampingFactor = 0.045;
-controls.enablePan = true;
+controls.enablePan = !useTouchControls;
 controls.screenSpacePanning = true;
 controls.minDistance = 4.5;
 controls.maxDistance = 18;
@@ -219,11 +241,14 @@ const planets = [];
 const moons = [];
 
 function makePlanet(path, position, radius, tilt, rotationSpeed) {
-    const material = new THREE.MeshStandardMaterial({
-        map: loadTexture(path),
-        roughness: 0.92,
-        metalness: 0,
-    });
+    const map = loadTexture(path);
+    const material = useMobileQuality
+        ? new THREE.MeshLambertMaterial({ map })
+        : new THREE.MeshStandardMaterial({
+            map,
+            roughness: 0.92,
+            metalness: 0,
+        });
     const planet = new THREE.Mesh(planetGeometry, material);
     planet.position.copy(position);
     planet.scale.setScalar(radius);
@@ -298,17 +323,22 @@ function addAtmosphere(planet, color, opacity, scale = 1.035) {
     planet.add(atmosphere);
 }
 
-addAtmosphere(earth, 0x6fa9ff, 0.1);
-addAtmosphere(neptune, 0x4f75ff, 0.08, 1.045);
-addAtmosphere(venus, 0xffa64d, 0.07, 1.025);
+if (quality.enableAtmospheres) {
+    addAtmosphere(earth, 0x6fa9ff, 0.1);
+    addAtmosphere(neptune, 0x4f75ff, 0.08, 1.045);
+    addAtmosphere(venus, 0xffa64d, 0.07, 1.025);
+}
 
 const lunarTexture = loadTexture("assets/moon-map.jpg");
 const tritonTexture = loadTexture("assets/triton-map.jpg");
 
 function addMoon(parent, radius, distance, speed, texture, color, inclination, phase) {
+    const material = useMobileQuality
+        ? new THREE.MeshLambertMaterial({ map: texture, color })
+        : new THREE.MeshStandardMaterial({ map: texture, color, roughness: 1 });
     const moon = new THREE.Mesh(
         new THREE.SphereGeometry(radius, ...quality.moonSegments),
-        new THREE.MeshStandardMaterial({ map: texture, color, roughness: 1 }),
+        material,
     );
     moon.userData = {
         parent,
@@ -324,8 +354,10 @@ function addMoon(parent, radius, distance, speed, texture, color, inclination, p
 
 addMoon(earth, 24, 380, 0.09, lunarTexture, 0xc7c5bf, 0.35, 0.4);
 addMoon(jupiter, 7, 380, 0.055, lunarTexture, 0xd8b883, 0.18, 0);
-addMoon(jupiter, 6, 500, 0.042, lunarTexture, 0xa89d88, -0.24, 2);
-addMoon(jupiter, 8, 650, 0.03, lunarTexture, 0xc4b5a1, 0.3, 4);
+if (!useMobileQuality) {
+    addMoon(jupiter, 6, 500, 0.042, lunarTexture, 0xa89d88, -0.24, 2);
+    addMoon(jupiter, 8, 650, 0.03, lunarTexture, 0xc4b5a1, 0.3, 4);
+}
 addMoon(neptune, 12, 450, 0.025, tritonTexture, 0xd0c9bb, -0.35, 1.2);
 
 const starTexture = loadTexture("assets/star-disc.png");
@@ -347,23 +379,38 @@ sunGlow.position.copy(sunPosition);
 sunGlow.scale.set(sunRadius * 12, sunRadius * 12, 1);
 scene.add(sunGlow);
 
-const sunCorona = new THREE.Sprite(
-    new THREE.SpriteMaterial({
-        map: glowTexture,
-        color: 0xff8a36,
-        transparent: true,
-        opacity: 0.38,
-        depthWrite: false,
-        blending: THREE.AdditiveBlending,
-        fog: false,
-        toneMapped: false,
-    }),
-);
-sunCorona.position.copy(sunPosition);
-sunCorona.scale.set(sunRadius * 32, sunRadius * 32, 1);
-scene.add(sunCorona);
+if (!useMobileQuality) {
+    const sunCorona = new THREE.Sprite(
+        new THREE.SpriteMaterial({
+            map: glowTexture,
+            color: 0xff8a36,
+            transparent: true,
+            opacity: 0.38,
+            depthWrite: false,
+            blending: THREE.AdditiveBlending,
+            fog: false,
+            toneMapped: false,
+        }),
+    );
+    sunCorona.position.copy(sunPosition);
+    sunCorona.scale.set(sunRadius * 32, sunRadius * 32, 1);
+    scene.add(sunCorona);
+}
 
 function makeStarMaterial(opacity) {
+    if (quality.simpleStars) {
+        return new THREE.PointsMaterial({
+            map: starTexture,
+            size: 1.15,
+            sizeAttenuation: true,
+            transparent: true,
+            opacity,
+            vertexColors: true,
+            depthWrite: false,
+            blending: THREE.AdditiveBlending,
+            toneMapped: false,
+        });
+    }
     return new THREE.ShaderMaterial({
         uniforms: {
             map: { value: starTexture },
@@ -518,55 +565,67 @@ const dustGeometry = new THREE.BufferGeometry();
 dustGeometry.setAttribute("position", new THREE.BufferAttribute(dustPositions, 3));
 dustGeometry.setAttribute("color", new THREE.BufferAttribute(dustColors, 3));
 dustGeometry.setAttribute("pointSize", new THREE.BufferAttribute(dustSizes, 1));
-const dustMaterial = new THREE.ShaderMaterial({
-    uniforms: {
-        map: { value: starTexture },
-        pixelRatio: { value: renderer.getPixelRatio() },
-        speed: { value: 0 },
-    },
-    vertexShader: `
-        attribute vec3 color;
-        attribute float pointSize;
-        uniform float pixelRatio;
-        uniform float speed;
-        varying vec3 vColor;
-        varying float vOpacity;
-        varying float vSpeed;
-        varying vec2 vStreakDirection;
-        void main() {
-            vColor = color;
-            vOpacity = 0.2 + pointSize * 0.16;
-            vSpeed = speed;
-            vec4 viewPosition = modelViewMatrix * vec4(position, 1.0);
-            vStreakDirection = normalize(viewPosition.xy + vec2(0.0001));
-            gl_Position = projectionMatrix * viewPosition;
-            gl_PointSize = pointSize * pixelRatio * (1.0 + speed * 7.0);
-        }
-    `,
-    fragmentShader: `
-        uniform sampler2D map;
-        varying vec3 vColor;
-        varying float vOpacity;
-        varying float vSpeed;
-        varying vec2 vStreakDirection;
-        void main() {
-            vec2 centered = gl_PointCoord - vec2(0.5);
-            vec2 perpendicular = vec2(-vStreakDirection.y, vStreakDirection.x);
-            float along = dot(centered, vStreakDirection);
-            float across = dot(centered, perpendicular);
-            float streak = smoothstep(0.13, 0.0, abs(across))
-                * smoothstep(0.52, 0.18, abs(along));
-            float disc = texture2D(map, gl_PointCoord).a;
-            float alpha = mix(disc, streak, vSpeed) * vOpacity;
-            if (alpha < 0.025) discard;
-            gl_FragColor = vec4(vColor, alpha);
-        }
-    `,
-    transparent: true,
-    depthWrite: false,
-    blending: THREE.AdditiveBlending,
-    toneMapped: false,
-});
+const dustMaterial = quality.simpleStars
+    ? new THREE.PointsMaterial({
+        map: starTexture,
+        size: 1.05,
+        sizeAttenuation: true,
+        transparent: true,
+        opacity: 0.28,
+        vertexColors: true,
+        depthWrite: false,
+        blending: THREE.AdditiveBlending,
+        toneMapped: false,
+    })
+    : new THREE.ShaderMaterial({
+        uniforms: {
+            map: { value: starTexture },
+            pixelRatio: { value: renderer.getPixelRatio() },
+            speed: { value: 0 },
+        },
+        vertexShader: `
+            attribute vec3 color;
+            attribute float pointSize;
+            uniform float pixelRatio;
+            uniform float speed;
+            varying vec3 vColor;
+            varying float vOpacity;
+            varying float vSpeed;
+            varying vec2 vStreakDirection;
+            void main() {
+                vColor = color;
+                vOpacity = 0.2 + pointSize * 0.16;
+                vSpeed = speed;
+                vec4 viewPosition = modelViewMatrix * vec4(position, 1.0);
+                vStreakDirection = normalize(viewPosition.xy + vec2(0.0001));
+                gl_Position = projectionMatrix * viewPosition;
+                gl_PointSize = pointSize * pixelRatio * (1.0 + speed * 7.0);
+            }
+        `,
+        fragmentShader: `
+            uniform sampler2D map;
+            varying vec3 vColor;
+            varying float vOpacity;
+            varying float vSpeed;
+            varying vec2 vStreakDirection;
+            void main() {
+                vec2 centered = gl_PointCoord - vec2(0.5);
+                vec2 perpendicular = vec2(-vStreakDirection.y, vStreakDirection.x);
+                float along = dot(centered, vStreakDirection);
+                float across = dot(centered, perpendicular);
+                float streak = smoothstep(0.13, 0.0, abs(across))
+                    * smoothstep(0.52, 0.18, abs(along));
+                float disc = texture2D(map, gl_PointCoord).a;
+                float alpha = mix(disc, streak, vSpeed) * vOpacity;
+                if (alpha < 0.025) discard;
+                gl_FragColor = vec4(vColor, alpha);
+            }
+        `,
+        transparent: true,
+        depthWrite: false,
+        blending: THREE.AdditiveBlending,
+        toneMapped: false,
+    });
 const dust = new THREE.Points(dustGeometry, dustMaterial);
 scene.add(dust);
 
@@ -587,15 +646,21 @@ asteroidGeometry.computeVertexNormals();
 const asteroidTexture = loadTexture("assets/bennu-map.jpg");
 asteroidTexture.repeat.set(1, 0.58);
 asteroidTexture.offset.set(0, 0.21);
-const asteroidMaterial = new THREE.MeshStandardMaterial({
-    map: asteroidTexture,
-    color: 0x9b958a,
-    emissive: 0x17130f,
-    emissiveIntensity: 0.4,
-    roughness: 1,
-    metalness: 0,
-    transparent: true,
-});
+const asteroidMaterial = useMobileQuality
+    ? new THREE.MeshLambertMaterial({
+        map: asteroidTexture,
+        color: 0x9b958a,
+        transparent: true,
+    })
+    : new THREE.MeshStandardMaterial({
+        map: asteroidTexture,
+        color: 0x9b958a,
+        emissive: 0x17130f,
+        emissiveIntensity: 0.4,
+        roughness: 1,
+        metalness: 0,
+        transparent: true,
+    });
 asteroidMaterial.onBeforeCompile = (shader) => {
     shader.vertexShader = shader.vertexShader
         .replace(
@@ -794,7 +859,8 @@ const environmentalRegions = [
         0x78d4ff,
         quality.ionParticles,
         115,
-        "ion",
+        // Custom ion shader is expensive on mobile tile GPUs.
+        useMobileQuality ? "dust" : "ion",
     ),
     makeParticleRegion(
         new THREE.Vector3(-520, -110, 280),
@@ -828,7 +894,7 @@ function makeComet(delay) {
     return line;
 }
 
-const comets = [makeComet(2.5), makeComet(10)];
+const comets = quality.enableComets ? [makeComet(2.5), makeComet(10)] : [];
 
 const dracoLoader = new DRACOLoader();
 dracoLoader.setDecoderPath("https://cdn.jsdelivr.net/npm/three@0.180.0/examples/jsm/libs/draco/");
@@ -849,6 +915,7 @@ modelLoader.load("peanut.glb", ({ scene: model }) => {
 });
 
 const keys = new Set();
+const touchInput = { forward: 0 };
 const velocity = new THREE.Vector3();
 const desiredVelocity = new THREE.Vector3();
 const flightForward = new THREE.Vector3();
@@ -865,12 +932,41 @@ let peanutDragging = false;
 let peanutPointerId = null;
 let previousPointerX = 0;
 let previousPointerY = 0;
+const thrustButton = document.querySelector("#thrust");
+if (useTouchControls && thrustButton) {
+    thrustButton.hidden = false;
+    const setThrust = (active) => {
+        touchInput.forward = active ? 1 : 0;
+        thrustButton.classList.toggle("is-active", active);
+    };
+    thrustButton.addEventListener("pointerdown", (event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        thrustButton.setPointerCapture(event.pointerId);
+        setThrust(true);
+    });
+    const endThrust = (event) => {
+        if (thrustButton.hasPointerCapture?.(event.pointerId)) {
+            thrustButton.releasePointerCapture(event.pointerId);
+        }
+        setThrust(false);
+    };
+    thrustButton.addEventListener("pointerup", endThrust);
+    thrustButton.addEventListener("pointercancel", endThrust);
+    thrustButton.addEventListener("lostpointercapture", () => setThrust(false));
+    window.addEventListener("blur", () => setThrust(false));
+}
 
 function updatePlayer(delta) {
     const strafe = Number(keys.has("ArrowRight") || keys.has("KeyD"))
         - Number(keys.has("ArrowLeft") || keys.has("KeyA"));
-    const forward = Number(keys.has("ArrowUp") || keys.has("KeyW"))
-        - Number(keys.has("ArrowDown") || keys.has("KeyS"));
+    const forward = THREE.MathUtils.clamp(
+        Number(keys.has("ArrowUp") || keys.has("KeyW"))
+            - Number(keys.has("ArrowDown") || keys.has("KeyS"))
+            + touchInput.forward,
+        -1,
+        1,
+    );
     const vertical = Number(keys.has("KeyE")) - Number(keys.has("KeyQ"));
 
     camera.updateMatrixWorld();
@@ -887,7 +983,9 @@ function updatePlayer(delta) {
     velocity.z = THREE.MathUtils.damp(velocity.z, desiredVelocity.z, 1.4, delta);
     player.position.addScaledVector(velocity, delta);
     flightSpeed = THREE.MathUtils.clamp(velocity.length() / 24, 0, 1);
-    dustMaterial.uniforms.speed.value = flightSpeed;
+    if (dustMaterial.uniforms?.speed) {
+        dustMaterial.uniforms.speed.value = flightSpeed;
+    }
     const targetFov = 52 + flightSpeed * 7;
     const nextFov = THREE.MathUtils.damp(camera.fov, targetFov, 4, delta);
     if (Math.abs(nextFov - camera.fov) > 0.001) {
@@ -912,8 +1010,12 @@ function updatePlayer(delta) {
 }
 
 function updateSpaceStars(recycleStars) {
-    spaceStarMaterial.uniforms.time.value = driftTime;
-    farStarMaterial.uniforms.time.value = driftTime + 17;
+    if (spaceStarMaterial.uniforms?.time) {
+        spaceStarMaterial.uniforms.time.value = driftTime;
+    }
+    if (farStarMaterial.uniforms?.time) {
+        farStarMaterial.uniforms.time.value = driftTime + 17;
+    }
     farStars.position.copy(player.position);
     farStars.rotation.y = driftTime * 0.0012;
     farStars.rotation.x = Math.sin(driftTime * 0.015) * 0.012;
@@ -1065,6 +1167,24 @@ function updateComets(delta) {
     }
 }
 
+function syncPixelRatioUniforms() {
+    const ratio = renderer.getPixelRatio();
+    if (spaceStarMaterial.uniforms?.pixelRatio) {
+        spaceStarMaterial.uniforms.pixelRatio.value = ratio;
+    }
+    if (farStarMaterial.uniforms?.pixelRatio) {
+        farStarMaterial.uniforms.pixelRatio.value = ratio;
+    }
+    if (dustMaterial.uniforms?.pixelRatio) {
+        dustMaterial.uniforms.pixelRatio.value = ratio;
+    }
+    for (const region of environmentalRegions) {
+        if (region.style === "ion" && region.cloud.material.uniforms?.pixelRatio) {
+            region.cloud.material.uniforms.pixelRatio.value = ratio;
+        }
+    }
+}
+
 function animate() {
     requestAnimationFrame(animate);
     if (document.hidden) return;
@@ -1072,7 +1192,7 @@ function animate() {
     const delta = Math.min(clock.getDelta(), 0.05);
     driftTime += delta;
     starRecycleAccumulator += delta;
-    const recycleStars = starRecycleAccumulator >= 0.1;
+    const recycleStars = starRecycleAccumulator >= quality.starRecycleSeconds;
     if (recycleStars) starRecycleAccumulator = 0;
 
     updatePlayer(delta);
@@ -1083,7 +1203,7 @@ function animate() {
     updateDustAndAsteroids(delta);
     updatePlanets(delta);
     updateEnvironmentalRegions(delta);
-    updateComets(delta);
+    if (quality.enableComets) updateComets(delta);
 
     playerDelta.copy(player.position).sub(lastPlayerPosition);
     camera.position.add(playerDelta);
@@ -1122,14 +1242,7 @@ function onResize() {
     camera.updateProjectionMatrix();
     renderer.setPixelRatio(nextPixelRatio);
     renderer.setSize(width, height, false);
-    spaceStarMaterial.uniforms.pixelRatio.value = renderer.getPixelRatio();
-    farStarMaterial.uniforms.pixelRatio.value = renderer.getPixelRatio();
-    dustMaterial.uniforms.pixelRatio.value = renderer.getPixelRatio();
-    for (const region of environmentalRegions) {
-        if (region.style === "ion") {
-            region.cloud.material.uniforms.pixelRatio.value = renderer.getPixelRatio();
-        }
-    }
+    syncPixelRatioUniforms();
 }
 
 window.addEventListener("resize", onResize);

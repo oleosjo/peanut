@@ -34,3 +34,39 @@ body {
 #space.is-dragging {
     cursor: grabbing;
 }
+
+#thrust {
+    position: fixed;
+    left: 50%;
+    bottom: max(1.25rem, env(safe-area-inset-bottom, 0px));
+    z-index: 2;
+    width: min(11.5rem, 46vw);
+    height: 3.4rem;
+    margin: 0;
+    padding: 0;
+    border: 1px solid rgba(210, 220, 255, 0.28);
+    border-radius: 0.85rem;
+    background: rgba(8, 10, 22, 0.55);
+    color: rgba(236, 241, 255, 0.92);
+    font: 600 0.95rem/1 "Trebuchet MS", "Gill Sans", sans-serif;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+    transform: translateX(-50%);
+    touch-action: none;
+    -webkit-user-select: none;
+    user-select: none;
+}
+
+#thrust:not([hidden]) {
+    display: grid;
+    place-items: center;
+}
+
+#thrust.is-active,
+#thrust:active {
+    background: rgba(120, 150, 255, 0.34);
+    border-color: rgba(210, 225, 255, 0.55);
+    color: #fff;
+}
