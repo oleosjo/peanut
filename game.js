@@ -24,7 +24,7 @@ const useTouchControls = useMobileQuality
 function bindThrustControls() {
     if (!thrustButton) return;
     // CSS already reveals the button on touch/narrow viewports; keep JS in sync.
-    thrustButton.style.display = useTouchControls ? "grid" : "none";
+    thrustButton.style.display = useTouchControls ? "block" : "none";
     if (!useTouchControls || thrustButton.dataset.bound === "true") return;
     thrustButton.dataset.bound = "true";
 
@@ -432,19 +432,49 @@ if (!useMobileQuality) {
     scene.add(sunCorona);
 }
 
+// Pixel-sized soft discs. PointsMaterial + sizeAttenuation uses world units and
+// turns nearby dust into huge white circles on mobile.
+function makeSoftPointMaterial(opacity, sizeMul = 1) {
+    return new THREE.ShaderMaterial({
+        uniforms: {
+            map: { value: starTexture },
+            pixelRatio: { value: renderer.getPixelRatio() },
+            opacity: { value: opacity },
+            sizeMul: { value: sizeMul },
+        },
+        vertexShader: `
+            attribute vec3 color;
+            attribute float pointSize;
+            uniform float pixelRatio;
+            uniform float sizeMul;
+            varying vec3 vColor;
+            void main() {
+                vColor = color;
+                vec4 viewPosition = modelViewMatrix * vec4(position, 1.0);
+                gl_Position = projectionMatrix * viewPosition;
+                gl_PointSize = max(1.0, pointSize * sizeMul * pixelRatio);
+            }
+        `,
+        fragmentShader: `
+            uniform sampler2D map;
+            uniform float opacity;
+            varying vec3 vColor;
+            void main() {
+                float alpha = texture2D(map, gl_PointCoord).a * opacity;
+                if (alpha < 0.04) discard;
+                gl_FragColor = vec4(vColor, alpha);
+            }
+        `,
+        transparent: true,
+        depthWrite: false,
+        blending: THREE.AdditiveBlending,
+        toneMapped: false,
+    });
+}
+
 function makeStarMaterial(opacity) {
     if (quality.simpleStars) {
-        return new THREE.PointsMaterial({
-            map: starTexture,
-            size: 1.15,
-            sizeAttenuation: true,
-            transparent: true,
-            opacity,
-            vertexColors: true,
-            depthWrite: false,
-            blending: THREE.AdditiveBlending,
-            toneMapped: false,
-        });
+        return makeSoftPointMaterial(opacity, 1);
     }
     return new THREE.ShaderMaterial({
         uniforms: {
@@ -600,25 +630,28 @@ const dustGeometry = new THREE.BufferGeometry();
 dustGeometry.setAttribute("position", new THREE.BufferAttribute(dustPositions, 3));
 dustGeometry.setAttribute("color", new THREE.BufferAttribute(dustColors, 3));
 dustGeometry.setAttribute("pointSize", new THREE.BufferAttribute(dustSizes, 1));
-const dustMaterial = quality.simpleStars
-    ? new THREE.PointsMaterial({
-        map: starTexture,
-        size: 1.05,
-        sizeAttenuation: true,
-        transparent: true,
-        opacity: 0.28,
-        vertexColors: true,
-        depthWrite: false,
-        blending: THREE.AdditiveBlending,
-        toneMapped: false,
-    })
-    : new THREE.ShaderMaterial({
-        uniforms: {
-            map: { value: starTexture },
-            pixelRatio: { value: renderer.getPixelRatio() },
-            speed: { value: 0 },
-        },
-        vertexShader: `
+const dustMaterial = new THREE.ShaderMaterial({
+    uniforms: {
+        map: { value: starTexture },
+        pixelRatio: { value: renderer.getPixelRatio() },
+        speed: { value: 0 },
+    },
+    vertexShader: quality.simpleStars
+        ? `
+            attribute vec3 color;
+            attribute float pointSize;
+            uniform float pixelRatio;
+            varying vec3 vColor;
+            varying float vOpacity;
+            void main() {
+                vColor = color;
+                vOpacity = 0.18 + pointSize * 0.14;
+                vec4 viewPosition = modelViewMatrix * vec4(position, 1.0);
+                gl_Position = projectionMatrix * viewPosition;
+                gl_PointSize = max(1.0, pointSize * pixelRatio);
+            }
+        `
+        : `
             attribute vec3 color;
             attribute float pointSize;
             uniform float pixelRatio;
@@ -637,7 +670,18 @@ const dustMaterial = quality.simpleStars
                 gl_PointSize = pointSize * pixelRatio * (1.0 + speed * 7.0);
             }
         `,
-        fragmentShader: `
+    fragmentShader: quality.simpleStars
+        ? `
+            uniform sampler2D map;
+            varying vec3 vColor;
+            varying float vOpacity;
+            void main() {
+                float alpha = texture2D(map, gl_PointCoord).a * vOpacity;
+                if (alpha < 0.025) discard;
+                gl_FragColor = vec4(vColor, alpha);
+            }
+        `
+        : `
             uniform sampler2D map;
             varying vec3 vColor;
             varying float vOpacity;
@@ -656,11 +700,11 @@ const dustMaterial = quality.simpleStars
                 gl_FragColor = vec4(vColor, alpha);
             }
         `,
-        transparent: true,
-        depthWrite: false,
-        blending: THREE.AdditiveBlending,
-        toneMapped: false,
-    });
+    transparent: true,
+    depthWrite: false,
+    blending: THREE.AdditiveBlending,
+    toneMapped: false,
+});
 const dust = new THREE.Points(dustGeometry, dustMaterial);
 scene.add(dust);
 
@@ -869,16 +913,7 @@ function makeParticleRegion(position, color, count, radius, style = "dust") {
             depthWrite: false,
             toneMapped: false,
         })
-        : new THREE.PointsMaterial({
-            map: starTexture,
-            size: 1.8,
-            sizeAttenuation: true,
-            transparent: true,
-            opacity: 0.28,
-            vertexColors: true,
-            blending: THREE.AdditiveBlending,
-            depthWrite: false,
-        });
+        : makeSoftPointMaterial(0.28, useMobileQuality ? 1.1 : 1.8);
     const cloud = new THREE.Points(
         geometry,
         material,
