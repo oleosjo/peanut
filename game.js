@@ -4,6 +4,56 @@ import { DRACOLoader } from "three/addons/loaders/DRACOLoader.js";
 import { OrbitControls } from "three/addons/controls/OrbitControls.js";
 
 const canvas = document.querySelector("#space");
+
+// iOS Chrome/Safari crash under GPU memory pressure from 8K sky + retina
+// framebuffers. Detect constrained devices and run a lighter quality path.
+const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent)
+    || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
+const isCoarsePointer = matchMedia("(pointer: coarse)").matches;
+const isNarrowViewport = Math.min(innerWidth, innerHeight) < 700;
+const isLowMemory = typeof navigator.deviceMemory === "number" && navigator.deviceMemory <= 4;
+const useMobileQuality = isIOS || isCoarsePointer || isNarrowViewport || isLowMemory;
+
+const quality = useMobileQuality
+    ? {
+        antialias: false,
+        maxPixelRatio: 1.25,
+        anisotropy: 1,
+        planetSegments: [32, 16],
+        nebulaSegments: [32, 16],
+        moonSegments: [16, 12],
+        asteroidDetail: 1,
+        spaceStars: 1800,
+        farStars: 900,
+        dust: 400,
+        asteroids: 5,
+        ionParticles: 180,
+        dustRegionParticles: 200,
+        mobileAssets: true,
+        maxTextureSize: 2048,
+    }
+    : {
+        antialias: true,
+        maxPixelRatio: 2,
+        anisotropy: null,
+        planetSegments: [64, 32],
+        nebulaSegments: [64, 32],
+        moonSegments: [32, 20],
+        asteroidDetail: 4,
+        spaceStars: 9000,
+        farStars: 4200,
+        dust: 1600,
+        asteroids: 14,
+        ionParticles: 760,
+        dustRegionParticles: 800,
+        mobileAssets: false,
+        maxTextureSize: 8192,
+    };
+
+function pixelRatioCap() {
+    return Math.min(devicePixelRatio, quality.maxPixelRatio);
+}
+
 const scene = new THREE.Scene();
 scene.fog = new THREE.FogExp2(0x080713, 0.00018);
 
@@ -12,15 +62,23 @@ camera.position.set(4, 0.45, 6.9);
 
 const renderer = new THREE.WebGLRenderer({
     canvas,
-    antialias: true,
+    antialias: quality.antialias,
     alpha: false,
-    powerPreference: "high-performance",
+    powerPreference: useMobileQuality ? "default" : "high-performance",
+    stencil: false,
+    depth: true,
 });
-renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
-renderer.setSize(innerWidth, innerHeight);
+renderer.setPixelRatio(pixelRatioCap());
+renderer.setSize(innerWidth, innerHeight, false);
 renderer.outputColorSpace = THREE.SRGBColorSpace;
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
 renderer.toneMappingExposure = 1.24;
+
+// 8K sky exceeds common mobile MAX_TEXTURE_SIZE (4096); force downscaled assets.
+if (renderer.capabilities.maxTextureSize < 8192) {
+    quality.mobileAssets = true;
+    quality.maxTextureSize = Math.min(quality.maxTextureSize, 2048);
+}
 
 scene.add(new THREE.HemisphereLight(0xb7c5ff, 0x241116, 1.45));
 
@@ -61,10 +119,41 @@ controls.mouseButtons.RIGHT = THREE.MOUSE.ROTATE;
 controls.update();
 
 const textureLoader = new THREE.TextureLoader();
-const maxAnisotropy = renderer.capabilities.getMaxAnisotropy();
+const maxAnisotropy = quality.anisotropy ?? renderer.capabilities.getMaxAnisotropy();
+const gpuMaxTextureSize = renderer.capabilities.maxTextureSize;
+const textureSizeCap = Math.min(quality.maxTextureSize, gpuMaxTextureSize);
+
+function resolveTexturePath(path) {
+    if (!quality.mobileAssets || !path.startsWith("assets/")) return path;
+    const file = path.slice("assets/".length);
+    if (file === "star-disc.png" || file === "star-glow.png") return path;
+    if (file === "cosmic-cliffs.png") return "assets/mobile/cosmic-cliffs.jpg";
+    return `assets/mobile/${file}`;
+}
+
+function clampTextureToCap(texture) {
+    const source = texture.image;
+    if (!source?.width || !source?.height) return;
+    const largest = Math.max(source.width, source.height);
+    if (largest <= textureSizeCap) return;
+
+    const scale = textureSizeCap / largest;
+    const width = Math.max(1, Math.round(source.width * scale));
+    const height = Math.max(1, Math.round(source.height * scale));
+    const resizeCanvas = document.createElement("canvas");
+    resizeCanvas.width = width;
+    resizeCanvas.height = height;
+    const context = resizeCanvas.getContext("2d", { alpha: false });
+    if (!context) return;
+    context.drawImage(source, 0, 0, width, height);
+    texture.image = resizeCanvas;
+    texture.needsUpdate = true;
+}
 
 function loadTexture(path, colorSpace = THREE.SRGBColorSpace) {
-    const texture = textureLoader.load(path);
+    const texture = textureLoader.load(resolveTexturePath(path), (loaded) => {
+        clampTextureToCap(loaded);
+    });
     texture.colorSpace = colorSpace;
     texture.anisotropy = maxAnisotropy;
     return texture;
@@ -78,7 +167,7 @@ scene.backgroundIntensity = 0.96;
 
 const nebulaTexture = loadTexture("assets/cosmic-cliffs.png");
 const distantNebula = new THREE.Mesh(
-    new THREE.SphereGeometry(110000, 64, 32),
+    new THREE.SphereGeometry(110000, ...quality.nebulaSegments),
     new THREE.ShaderMaterial({
         uniforms: {
             map: { value: nebulaTexture },
@@ -125,7 +214,7 @@ const distantNebula = new THREE.Mesh(
 );
 scene.add(distantNebula);
 
-const planetGeometry = new THREE.SphereGeometry(1, 64, 32);
+const planetGeometry = new THREE.SphereGeometry(1, ...quality.planetSegments);
 const planets = [];
 const moons = [];
 
@@ -218,7 +307,7 @@ const tritonTexture = loadTexture("assets/triton-map.jpg");
 
 function addMoon(parent, radius, distance, speed, texture, color, inclination, phase) {
     const moon = new THREE.Mesh(
-        new THREE.SphereGeometry(radius, 32, 20),
+        new THREE.SphereGeometry(radius, ...quality.moonSegments),
         new THREE.MeshStandardMaterial({ map: texture, color, roughness: 1 }),
     );
     moon.userData = {
@@ -344,7 +433,7 @@ function setStarColor(colors, index) {
     colors[index + 2] = blue * brightness;
 }
 
-const spaceStarCount = innerWidth < 700 ? 4500 : 9000;
+const spaceStarCount = quality.spaceStars;
 const spaceStarPositions = new Float32Array(spaceStarCount * 3);
 const spaceStarColors = new Float32Array(spaceStarCount * 3);
 const spaceStarPhases = new Float32Array(spaceStarCount);
@@ -370,7 +459,7 @@ const spaceStarMaterial = makeStarMaterial(0.86);
 const spaceStars = new THREE.Points(spaceStarGeometry, spaceStarMaterial);
 scene.add(spaceStars);
 
-const farStarCount = innerWidth < 700 ? 2200 : 4200;
+const farStarCount = quality.farStars;
 const farStarPositions = new Float32Array(farStarCount * 3);
 const farStarColors = new Float32Array(farStarCount * 3);
 const farStarPhases = new Float32Array(farStarCount);
@@ -399,7 +488,7 @@ const farStarMaterial = makeStarMaterial(0.56);
 const farStars = new THREE.Points(farStarGeometry, farStarMaterial);
 scene.add(farStars);
 
-const dustCount = innerWidth < 700 ? 900 : 1600;
+const dustCount = quality.dust;
 const dustPositions = new Float32Array(dustCount * 3);
 const dustColors = new Float32Array(dustCount * 3);
 const dustSizes = new Float32Array(dustCount);
@@ -481,8 +570,8 @@ const dustMaterial = new THREE.ShaderMaterial({
 const dust = new THREE.Points(dustGeometry, dustMaterial);
 scene.add(dust);
 
-const asteroidCount = innerWidth < 700 ? 8 : 14;
-const asteroidGeometry = new THREE.IcosahedronGeometry(1, 4);
+const asteroidCount = quality.asteroids;
+const asteroidGeometry = new THREE.IcosahedronGeometry(1, quality.asteroidDetail);
 const asteroidVertices = asteroidGeometry.attributes.position;
 for (let i = 0; i < asteroidVertices.count; i += 1) {
     const x = asteroidVertices.getX(i);
@@ -703,11 +792,16 @@ const environmentalRegions = [
     makeParticleRegion(
         new THREE.Vector3(-40, 100, -580),
         0x78d4ff,
-        innerWidth < 700 ? 420 : 760,
+        quality.ionParticles,
         115,
         "ion",
     ),
-    makeParticleRegion(new THREE.Vector3(-520, -110, 280), 0xffba62, innerWidth < 700 ? 450 : 800, 130),
+    makeParticleRegion(
+        new THREE.Vector3(-520, -110, 280),
+        0xffba62,
+        quality.dustRegionParticles,
+        130,
+    ),
 ];
 
 function makeComet(delay) {
@@ -972,6 +1066,9 @@ function updateComets(delta) {
 }
 
 function animate() {
+    requestAnimationFrame(animate);
+    if (document.hidden) return;
+
     const delta = Math.min(clock.getDelta(), 0.05);
     driftTime += delta;
     starRecycleAccumulator += delta;
@@ -995,14 +1092,36 @@ function animate() {
     controls.update();
 
     renderer.render(scene, camera);
-    requestAnimationFrame(animate);
 }
 
+document.addEventListener("visibilitychange", () => {
+    if (!document.hidden) clock.getDelta();
+});
+
+let lastRenderWidth = 0;
+let lastRenderHeight = 0;
+let lastPixelRatio = 0;
+
 function onResize() {
-    camera.aspect = innerWidth / innerHeight;
+    const width = innerWidth;
+    const height = innerHeight;
+    const nextPixelRatio = pixelRatioCap();
+    // iOS leaks GPU memory when the WebGL drawing buffer is resized repeatedly.
+    if (
+        width === lastRenderWidth
+        && height === lastRenderHeight
+        && nextPixelRatio === lastPixelRatio
+    ) {
+        return;
+    }
+    lastRenderWidth = width;
+    lastRenderHeight = height;
+    lastPixelRatio = nextPixelRatio;
+
+    camera.aspect = width / height;
     camera.updateProjectionMatrix();
-    renderer.setSize(innerWidth, innerHeight);
-    renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+    renderer.setPixelRatio(nextPixelRatio);
+    renderer.setSize(width, height, false);
     spaceStarMaterial.uniforms.pixelRatio.value = renderer.getPixelRatio();
     farStarMaterial.uniforms.pixelRatio.value = renderer.getPixelRatio();
     dustMaterial.uniforms.pixelRatio.value = renderer.getPixelRatio();
@@ -1014,6 +1133,7 @@ function onResize() {
 }
 
 window.addEventListener("resize", onResize);
+onResize();
 canvas.addEventListener("contextmenu", (event) => event.preventDefault());
 canvas.addEventListener("pointerdown", (event) => {
     if (event.button !== 0 || event.pointerType === "touch") return;

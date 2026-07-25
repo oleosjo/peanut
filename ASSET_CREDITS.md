@@ -2,7 +2,8 @@
 
 The space imagery used by the ambient peanut scene is sourced from freely
 reusable NASA material. Credits are kept here so the experience itself can
-remain text-free.
+remain text-free. Downscaled copies under `assets/mobile/` are derived from
+the same sources for constrained devices.
 
 ## 360-degree star map
 
